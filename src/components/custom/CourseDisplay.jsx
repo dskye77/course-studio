@@ -1,7 +1,11 @@
 import CourseCard from "@/components/custom/CourseCard";
 import { useCourseDisplay } from "@/stores/courses";
 
-export default function CoursesDisplay({ courses, ignoreFilters = false }) {
+export default function CoursesDisplay({
+  courses,
+  from,
+  ignoreFilters = false,
+}) {
   const searchQuery = useCourseDisplay((state) => state.searchQuery);
   const category = useCourseDisplay((state) => state.category);
   const price = useCourseDisplay((state) => state.price);
@@ -63,7 +67,7 @@ export default function CoursesDisplay({ courses, ignoreFilters = false }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl">
       {sortedCourses.map((course) => (
-        <CourseCard key={course.id} course={course} />
+        <CourseCard key={course.id} course={course} type={from} />
       ))}
       {sortedCourses.length === 0 && <h2>No courses match your requiremets</h2>}
     </div>

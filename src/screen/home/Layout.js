@@ -1,5 +1,5 @@
 "use client";
-import Header from "@/screen/layout/header/header";
+import Header from "@/components/layouts/header";
 import { Toaster } from "sonner";
 
 export default function Layout({ children }) {

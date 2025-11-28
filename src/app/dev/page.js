@@ -1,2 +1,2 @@
-import Dev from "@/screen/dev";
+import Dev from "@/screen/dev/devScreen";
 export default Dev;

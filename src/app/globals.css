@@ -49,7 +49,7 @@
   --foreground: black;
   --card: whitesmoke;
   --card-foreground: black;
-  --popover: whitesmoke;
+  --popover: white;
   --popover-foreground: black;
   --primary: blue;
   --primary-card: rgb(174, 174, 255);
@@ -85,7 +85,7 @@
   --foreground: white;
   --card: rgba(105, 105, 105, 0.164);
   --card-foreground: white;
-  --popover: dimgray;
+  --popover: black;
   --popover-foreground: white;
   --primary: skyblue;
   --primary-foreground: black;

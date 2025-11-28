@@ -1,4 +1,4 @@
-import CoursesScreen from "@/screen/courses/Courses";
+import CoursesScreen from "@/screen/courses/CoursesScreen";
 export default async function CoursesPage() {
   let courses;
 
@@ -9,5 +9,5 @@ export default async function CoursesPage() {
     courses = [];
   }
 
-  return <CoursesScreen courses={courses} />;
+  return <CoursesScreen courses={courses} from="dev" />;
 }

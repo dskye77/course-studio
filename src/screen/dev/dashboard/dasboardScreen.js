@@ -148,7 +148,7 @@ function QuickActions() {
       <div className="flex flex-wrap gap-4">
         <Button
           className="flex items-center gap-2"
-          onClick={() => router.push("/dev/courses/create-course")}
+          onClick={() => router.push("/dev/courses/new")}
         >
           <Plus size={18} /> Create Course
         </Button>

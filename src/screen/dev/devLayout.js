@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useDashboard } from "@/stores/dashboard";
 import { useAuth } from "@/hooks/useAuth"; // ← your new hook
 
-import Sidebar from "@/screen/dev/layout/Sidebar";
+import Sidebar from "@/components/dev/layouts/Sidebar";
 
 export default function DevLayout({ children }) {
   const { user, loading } = useAuth(); // ← beautiful & reusable
@@ -36,7 +36,7 @@ export default function DevLayout({ children }) {
   return (
     <main className="h-screen flex bg-gray-50 dark:bg-gray-950">
       <Sidebar />
-      <div className="flex-1 overflow-x-auto h-full px-4">{children}</div>
+      <div className="flex-1 overflow-y-auto h-full">{children}</div>
     </main>
   );
 }
