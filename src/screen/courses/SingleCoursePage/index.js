@@ -2,9 +2,9 @@
 
 import CourseHead from "./CourseHead";
 
-import SearchBar from "../SearchBar";
+import SearchBar from "../../../components/custom/CourseSearchBar";
 
-import CoursesDisplay from "../CoursesDisplay";
+import CoursesDisplay from "../../../components/custom/CourseDisplay";
 
 export default function CoursePage({ course, courses }) {
   if (!course) return <p>Course not found</p>;

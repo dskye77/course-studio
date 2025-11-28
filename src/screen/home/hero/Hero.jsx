@@ -21,7 +21,7 @@ export default function Hero() {
       title: "For Creators",
       description:
         "Build and sell your courses. Create beautiful interactive courses easily.",
-      actionText: "Get Started",
+      actionText: <Link href="/dev/dashboard">Get Started</Link>,
     },
     {
       title: "For Learners",
@@ -48,7 +48,7 @@ export default function Hero() {
         {/* Hero Buttons */}
         <div className="flex flex-col sm:flex-row gap-6 mt-6 justify-center items-center">
           <ScaleButton className="bg-primary text-primary-foreground py-4 px-8">
-            Create Course
+            <Link href="/dev/dashboard">Create Course</Link>
           </ScaleButton>
           <ScaleButton
             className="border border-primary text-primary py-4 px-8"

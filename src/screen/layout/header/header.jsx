@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/sheet";
 
 import { Menu } from "lucide-react";
-import Icon from "../../../../public/icon.png";
 
 export default function Header() {
   const pathName = usePathname();
@@ -33,7 +32,12 @@ export default function Header() {
 
   const closeMenu = () => setOpen(false);
 
-  if (pathName.startsWith("/login")) return;
+  if (
+    pathName.startsWith("/login") ||
+    pathName.startsWith("/signup") ||
+    pathName.startsWith("/dev")
+  )
+    return;
 
   return (
     <header className="w-full px-6 py-4 border-b border-gray-200 backdrop-blur-md sticky top-0 z-50 flex items-center justify-between">
@@ -41,8 +45,8 @@ export default function Header() {
       <Link href="/">
         <div className="flex items-center gap-3">
           <Image
-            src={Icon}
-            alt="Course Studio"
+            src={"/icon.png"}
+            alt="Icon"
             width={42}
             height={42}
             className="dark:invert"
@@ -79,7 +83,9 @@ export default function Header() {
             Login
           </Button>
         </Link>
-        <Button className="px-5">Sign up</Button>
+        <Link href="/signup">
+          <Button className="px-5">Sign up</Button>
+        </Link>
       </div>
 
       {/* Mobile Menu Trigger */}
@@ -147,9 +153,14 @@ export default function Header() {
                 </Button>
               </Link>
 
-              <Button className="py-3 rounded-xl text-base" onClick={closeMenu}>
-                Sign up
-              </Button>
+              <Link href="/signup">
+                <Button
+                  className="py-3 rounded-xl text-base"
+                  onClick={closeMenu}
+                >
+                  Sign up
+                </Button>
+              </Link>
             </div>
           </SheetContent>
         </Sheet>

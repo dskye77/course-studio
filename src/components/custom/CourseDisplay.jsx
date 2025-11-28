@@ -1,4 +1,3 @@
-import React from "react";
 import CourseCard from "@/components/custom/CourseCard";
 import { useCourseDisplay } from "@/stores/courses";
 

@@ -27,7 +27,7 @@ export default function SearchBar() {
 
   return (
     <header className="w-full bg-background py-10 px-4 md:px-8 border-b">
-      {!pathName.startsWith("/courses/") && (
+      {pathName === "/courses" && (
         <div className="max-w-5xl mx-auto text-center mb-8 mt-6">
           <h1 className="text-3xl md:text-5xl font-bold text-primary">
             Find Your Perfect Course

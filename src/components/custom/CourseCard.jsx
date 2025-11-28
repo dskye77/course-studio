@@ -3,8 +3,9 @@
 import Link from "next/link";
 
 import Image from "next/image";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+
 import { Users, ExternalLink, Star, Bookmark } from "lucide-react";
 
 export default function CourseCard({ course }) {

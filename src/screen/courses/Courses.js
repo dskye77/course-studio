@@ -1,7 +1,7 @@
 "use client";
-import SearchBar from "./SearchBar";
+import SearchBar from "@/components/custom/CourseSearchBar";
 
-import CoursesDisplay from "./CoursesDisplay";
+import CoursesDisplay from "@/components/custom/CourseDisplay";
 
 export default function CoursesScreen({ courses }) {
   // Show loading state
