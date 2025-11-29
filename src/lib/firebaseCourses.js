@@ -1,4 +1,5 @@
 // lib/firebaseCourses.js
+
 import { auth, db } from "./firebaseClient";
 import {
   doc,
@@ -225,6 +226,137 @@ export async function updateCourse({
   if (chapters !== undefined) updates.chapters = chapters;
 
   await setDoc(courseRef, updates, { merge: true });
+
+  // Re-sync public if published
+  const snap = await getDoc(courseRef);
+  if (snap.data()?.published) {
+    await publishCourse(courseId);
+  }
+}
+
+// UPDATE CHAPTER - Updates a specific chapter within a course
+export async function updateChapter(courseId, chapterId, data) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Login required");
+
+  const courseRef = doc(db, "users", user.uid, "courses", courseId);
+
+  // Get current course data
+  const courseSnap = await getDoc(courseRef);
+  if (!courseSnap.exists()) throw new Error("Course not found");
+
+  const courseData = courseSnap.data();
+  const chapters = courseData.chapters || [];
+
+  // Find and update the chapter
+  const chapterIndex = chapters.findIndex((ch) => ch.id === chapterId);
+  if (chapterIndex === -1) throw new Error("Chapter not found");
+
+  // Update the chapter
+  chapters[chapterIndex] = {
+    ...chapters[chapterIndex],
+    ...data,
+    updatedAt: serverTimestamp(),
+  };
+
+  // Save back to Firebase
+  await setDoc(
+    courseRef,
+    {
+      chapters,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  // Re-sync public if published
+  const snap = await getDoc(courseRef);
+  if (snap.data()?.published) {
+    await publishCourse(courseId);
+  }
+
+  return chapters[chapterIndex];
+}
+
+// GET SINGLE CHAPTER - Get one chapter from a course
+export async function getChapter(courseId, chapterId) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Login required");
+
+  const courseRef = doc(db, "users", user.uid, "courses", courseId);
+  const courseSnap = await getDoc(courseRef);
+
+  if (!courseSnap.exists()) throw new Error("Course not found");
+
+  const courseData = courseSnap.data();
+  const chapter = courseData.chapters?.find((ch) => ch.id === chapterId);
+
+  if (!chapter) throw new Error("Chapter not found");
+
+  return chapter;
+}
+
+// DELETE CHAPTER - Remove a chapter from a course
+export async function deleteChapter(courseId, chapterId) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Login required");
+
+  const courseRef = doc(db, "users", user.uid, "courses", courseId);
+
+  // Get current course data
+  const courseSnap = await getDoc(courseRef);
+  if (!courseSnap.exists()) throw new Error("Course not found");
+
+  const courseData = courseSnap.data();
+  let chapters = courseData.chapters || [];
+
+  // Remove the chapter
+  chapters = chapters.filter((ch) => ch.id !== chapterId);
+
+  // Reorder remaining chapters
+  chapters = chapters.map((ch, index) => ({
+    ...ch,
+    order: index,
+  }));
+
+  // Save back to Firebase
+  await setDoc(
+    courseRef,
+    {
+      chapters,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  // Re-sync public if published
+  const snap = await getDoc(courseRef);
+  if (snap.data()?.published) {
+    await publishCourse(courseId);
+  }
+}
+
+// REORDER CHAPTERS - Change the order of chapters
+export async function reorderChapters(courseId, reorderedChapters) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Login required");
+
+  const courseRef = doc(db, "users", user.uid, "courses", courseId);
+
+  // Update chapter order
+  const chaptersWithOrder = reorderedChapters.map((ch, index) => ({
+    ...ch,
+    order: index,
+  }));
+
+  await setDoc(
+    courseRef,
+    {
+      chapters: chaptersWithOrder,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   // Re-sync public if published
   const snap = await getDoc(courseRef);

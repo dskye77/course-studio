@@ -1,6 +1,19 @@
 // src/screen/dev/courses/single/DevSingleCourseScreen.js
 "use client";
 
+import {
+  Save,
+  Eye,
+  EyeOff,
+  ArrowLeft,
+  Plus,
+  Trash2,
+  GripVertical,
+  Edit2,
+  FileText,
+  AlertCircle,
+} from "lucide-react";
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,6 +23,7 @@ import {
   publishCourse,
   unpublishCourse,
 } from "@/lib/firebaseCourses";
+import { useCourseEditor } from "@/stores/courseEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,31 +33,39 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import ImageUploader from "@/components/custom/ImageUploader";
 import Image from "next/image";
-import {
-  Save,
-  Eye,
-  EyeOff,
-  ArrowLeft,
-  Plus,
-  Trash2,
-  GripVertical,
-} from "lucide-react";
 
 export default function DevSingleCourseScreen({ params }) {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [courseId, setCourseId] = useState(null);
-  const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [publishing, setPublishing] = useState(false);
-
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [imageFile, setImageFile] = useState(null);
-  const [chapters, setChapters] = useState([]);
   const [errors, setErrors] = useState({});
+
+  // Zustand store
+  const {
+    course,
+    title,
+    description,
+    price,
+    imageFile,
+    chapters,
+    isSaving,
+    isPublishing,
+    hasUnsavedChanges,
+    initializeCourse,
+    setTitle,
+    setDescription,
+    setPrice,
+    setImageFile,
+    addChapter,
+    updateChapter,
+    deleteChapter,
+    setIsSaving,
+    setIsPublishing,
+    markAsSaved,
+    getCourseData,
+    resetCourse,
+  } = useCourseEditor();
 
   useEffect(() => {
     const unwrapParams = async () => {
@@ -67,11 +89,8 @@ export default function DevSingleCourseScreen({ params }) {
           return;
         }
 
-        setCourse(data);
-        setTitle(data.title || "");
-        setDescription(data.description || "");
-        setPrice(data.price?.toString() || "");
-        setChapters(data.chapters || []);
+        // Initialize store with course data
+        initializeCourse(data);
       } catch (err) {
         console.error("Error fetching course:", err);
         toast.error("Failed to load course");
@@ -83,7 +102,27 @@ export default function DevSingleCourseScreen({ params }) {
     if (!authLoading && user && courseId) {
       fetchCourse();
     }
-  }, [user, authLoading, courseId, router]);
+  }, [user, authLoading, courseId, router, initializeCourse]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      resetCourse();
+    };
+  }, [resetCourse]);
+
+  // Warn about unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const validate = () => {
     const newErrors = {};
@@ -98,27 +137,30 @@ export default function DevSingleCourseScreen({ params }) {
   const handleSave = async () => {
     if (!validate()) return;
 
-    setSaving(true);
+    setIsSaving(true);
     try {
+      const courseData = getCourseData();
+
       await updateCourse({
         courseId,
-        title: title.trim(),
-        description: description.trim(),
-        price: Number(price),
-        imageFile: imageFile || undefined,
-        chapters,
+        title: courseData.title.trim(),
+        description: courseData.description.trim(),
+        price: Number(courseData.price),
+        imageFile: courseData.imageFile || undefined,
+        chapters: courseData.chapters,
       });
 
       toast.success("Course updated successfully!");
-      setImageFile(null);
+      markAsSaved();
 
+      // Refresh course data
       const updatedData = await getMyCourseData(courseId);
-      setCourse(updatedData);
+      initializeCourse(updatedData);
     } catch (err) {
       console.error("Save error:", err);
       toast.error(err.message || "Failed to save course");
     } finally {
-      setSaving(false);
+      setIsSaving(false);
     }
   };
 
@@ -133,58 +175,68 @@ export default function DevSingleCourseScreen({ params }) {
       return;
     }
 
-    setPublishing(true);
+    setIsPublishing(true);
     try {
       await publishCourse(courseId, user.displayName || user.email);
       toast.success("Course published successfully!");
 
       const updatedData = await getMyCourseData(courseId);
-      setCourse(updatedData);
+      initializeCourse(updatedData);
     } catch (err) {
       console.error("Publish error:", err);
       toast.error(err.message || "Failed to publish course");
     } finally {
-      setPublishing(false);
+      setIsPublishing(false);
     }
   };
 
   const handleUnpublish = async () => {
-    setPublishing(true);
+    setIsPublishing(true);
     try {
       await unpublishCourse(courseId);
       toast.success("Course unpublished");
 
       const updatedData = await getMyCourseData(courseId);
-      setCourse(updatedData);
+      initializeCourse(updatedData);
     } catch (err) {
       console.error("Unpublish error:", err);
       toast.error(err.message || "Failed to unpublish course");
     } finally {
-      setPublishing(false);
+      setIsPublishing(false);
     }
   };
 
-  const addChapter = () => {
-    const newChapter = {
-      id: `chapter-${Date.now()}`,
-      title: "",
-      content: "",
-      videoUrl: "",
-      order: chapters.length,
-    };
-    setChapters([...chapters, newChapter]);
+  const handleAddChapter = () => {
+    addChapter();
+    toast.success("Chapter added! Click Edit to add content.");
   };
 
-  const updateChapter = (index, field, value) => {
-    const updated = [...chapters];
-    updated[index] = { ...updated[index], [field]: value };
-    setChapters(updated);
-  };
+  const handleDeleteChapter = (index) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this chapter? This action cannot be undone."
+    );
+    if (!confirmed) return;
 
-  const deleteChapter = (index) => {
-    const updated = chapters.filter((_, i) => i !== index);
-    setChapters(updated);
+    deleteChapter(index);
     toast.success("Chapter removed");
+  };
+
+  const handleEditChapter = (chapterId) => {
+    if (chapters.some((ch) => !ch.title.trim())) {
+      toast.error("Please add a title to all chapters before editing content");
+      return;
+    }
+    router.push(`/dev/courses/${courseId}/chapters/${chapterId}`);
+  };
+
+  const handleBack = () => {
+    if (hasUnsavedChanges) {
+      const confirm = window.confirm(
+        "You have unsaved changes. Are you sure you want to leave?"
+      );
+      if (!confirm) return;
+    }
+    router.push("/dev/courses");
   };
 
   if (authLoading || loading) {
@@ -203,20 +255,24 @@ export default function DevSingleCourseScreen({ params }) {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <Button
-            variant="ghost"
-            onClick={() => router.push("/dev/courses")}
-            className="gap-2"
-          >
-            <ArrowLeft size={18} />
-            Back to Courses
-          </Button>
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" onClick={handleBack} className="gap-2">
+              <ArrowLeft size={18} />
+              Back to Courses
+            </Button>
+            {hasUnsavedChanges && (
+              <span className="flex items-center gap-1 text-sm text-orange-600 dark:text-orange-400">
+                <AlertCircle className="w-4 h-4" />
+                Unsaved changes
+              </span>
+            )}
+          </div>
 
           <div className="flex gap-2">
             <Button
               variant="outline"
               onClick={course.published ? handleUnpublish : handlePublish}
-              disabled={publishing}
+              disabled={isPublishing || hasUnsavedChanges}
               className="gap-2"
             >
               {course.published ? (
@@ -231,9 +287,13 @@ export default function DevSingleCourseScreen({ params }) {
                 </>
               )}
             </Button>
-            <Button onClick={handleSave} disabled={saving} className="gap-2">
+            <Button
+              onClick={handleSave}
+              disabled={isSaving || !hasUnsavedChanges}
+              className="gap-2"
+            >
               <Save size={18} />
-              {saving ? "Saving..." : "Save Changes"}
+              {isSaving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </div>
@@ -271,7 +331,7 @@ export default function DevSingleCourseScreen({ params }) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Course title"
-                disabled={saving}
+                disabled={isSaving}
                 className={errors.title ? "border-red-500" : ""}
               />
               {errors.title && (
@@ -287,7 +347,7 @@ export default function DevSingleCourseScreen({ params }) {
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="What will students learn?"
                 rows={5}
-                disabled={saving}
+                disabled={isSaving}
                 className={errors.description ? "border-red-500" : ""}
               />
               {errors.description && (
@@ -303,7 +363,7 @@ export default function DevSingleCourseScreen({ params }) {
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder="15000"
-                disabled={saving}
+                disabled={isSaving}
                 className={errors.price ? "border-red-500" : ""}
               />
               {errors.price && (
@@ -336,7 +396,7 @@ export default function DevSingleCourseScreen({ params }) {
             <ImageUploader
               onImageSelect={setImageFile}
               onImageRemove={() => setImageFile(null)}
-              disabled={saving}
+              disabled={isSaving}
             />
             {imageFile && (
               <p className="text-sm text-muted-foreground mt-2">
@@ -349,7 +409,7 @@ export default function DevSingleCourseScreen({ params }) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Chapters ({chapters.length})</CardTitle>
-            <Button onClick={addChapter} size="sm" className="gap-2">
+            <Button onClick={handleAddChapter} size="sm" className="gap-2">
               <Plus size={16} />
               Add Chapter
             </Button>
@@ -376,34 +436,73 @@ export default function DevSingleCourseScreen({ params }) {
                             onChange={(e) =>
                               updateChapter(index, "title", e.target.value)
                             }
-                            disabled={saving}
+                            disabled={isSaving}
                           />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => handleEditChapter(chapter.id)}
+                            title="Edit chapter content"
+                            disabled={isSaving || !chapter.title.trim()}
+                          >
+                            <Edit2 size={18} />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => deleteChapter(index)}
-                            disabled={saving}
+                            onClick={() => handleDeleteChapter(index)}
+                            disabled={isSaving}
+                            title="Delete chapter"
                           >
                             <Trash2 size={18} className="text-red-600" />
                           </Button>
                         </div>
-                        <Textarea
-                          placeholder="Chapter content"
-                          value={chapter.content}
-                          onChange={(e) =>
-                            updateChapter(index, "content", e.target.value)
-                          }
-                          rows={3}
-                          disabled={saving}
-                        />
+
+                        {chapter.content && chapter.content.length > 20 && (
+                          <div className="flex items-start gap-2 text-sm text-muted-foreground bg-muted p-3 rounded-lg">
+                            <FileText className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium mb-1">
+                                Chapter Content
+                              </p>
+                              <div
+                                className="line-clamp-2 text-xs"
+                                dangerouslySetInnerHTML={{
+                                  __html:
+                                    chapter.content.length > 150
+                                      ? `${chapter.content.substring(
+                                          0,
+                                          150
+                                        )}...`
+                                      : chapter.content,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
                         <Input
                           placeholder="Video URL (optional)"
                           value={chapter.videoUrl || ""}
                           onChange={(e) =>
                             updateChapter(index, "videoUrl", e.target.value)
                           }
-                          disabled={saving}
+                          disabled={isSaving}
                         />
+
+                        <div className="flex gap-4 text-xs text-muted-foreground">
+                          <span>Order: {index + 1}</span>
+                          {chapter.content && (
+                            <span>
+                              Content: {chapter.content.length} characters
+                            </span>
+                          )}
+                          {chapter.videoUrl && (
+                            <span className="text-blue-600 dark:text-blue-400">
+                              Has video
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -412,6 +511,40 @@ export default function DevSingleCourseScreen({ params }) {
             )}
           </CardContent>
         </Card>
+
+        {chapters.length > 0 && (
+          <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+            <CardContent className="pt-6">
+              <div className="flex gap-3">
+                <div className="flex-shrink-0">
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                    <span className="text-white text-sm">💡</span>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                    Quick Tips
+                  </h4>
+                  <ul className="space-y-1 text-sm text-blue-800 dark:text-blue-200">
+                    <li>
+                      • Chapters are saved to store immediately - no need to
+                      click save first
+                    </li>
+                    <li>
+                      • Click the <Edit2 className="inline w-3 h-3" /> button to
+                      open the rich text editor
+                    </li>
+                    <li>• Add chapter titles before editing content</li>
+                    <li>
+                      • Click &quot;Save Changes&quot; to persist all changes to
+                      Firebase
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
