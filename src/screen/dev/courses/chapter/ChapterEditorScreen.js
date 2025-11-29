@@ -29,9 +29,9 @@ export default function ChapterEditorScreen({ params }) {
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
 
   // Zustand store
+  const chapters = useCourseEditor((state) => state.chapters);
   const {
     course,
-    chapters,
     initializeCourse,
     updateChapterById,
     getChapterById,
@@ -46,7 +46,7 @@ export default function ChapterEditorScreen({ params }) {
       setChapterId(unwrapped.chapterId);
     };
     unwrapParams();
-  }, [params]);
+  }, [params, chapterId]);
 
   // Load course and chapter
   useEffect(() => {
@@ -56,26 +56,37 @@ export default function ChapterEditorScreen({ params }) {
       try {
         setLoading(true);
 
-        // Check if course is already in store
-        if (!course || course.id !== courseId) {
-          const courseData = await getMyCourseData(courseId);
-          if (!courseData) {
-            toast.error("Course not found");
-            router.replace("/dev/courses");
-            return;
-          }
-          initializeCourse(courseData);
-        }
+        // FIXED: Check if chapter exists in store first
+        let chapter = getChapterById(chapterId);
 
-        // Get chapter from store
-        const chapter = getChapterById(chapterId);
+        // // If chapter not in store, or course doesn't match, fetch from Firebase
+        // if (!chapter || !course || course.id !== courseId) {
+        //   console.log("Fetching course from Firebase...");
+        //   const courseData = await getMyCourseData(courseId);
+
+        //   if (!courseData) {
+        //     toast.error("Course not found");
+        //     router.replace("/dev/courses");
+        //     return;
+        //   }
+
+        //   // Initialize store with course data
+        //   initializeCourse(courseData);
+
+        //   // Get chapter from newly loaded course
+        //   chapter = courseData.chapters?.find((ch) => ch.id === chapterId);
+        // } else {
+        //   console.log("Using chapter from store");
+        // }
+
+        // Verify chapter exists
         if (!chapter) {
           toast.error("Chapter not found");
           router.replace(`/dev/courses/${courseId}`);
           return;
         }
 
-        // Initialize local state
+        // Initialize local state from chapter
         setTitle(chapter.title || "");
         setContent(
           chapter.content || "<p>Start writing your chapter content...</p>"
@@ -98,6 +109,7 @@ export default function ChapterEditorScreen({ params }) {
     authLoading,
     courseId,
     chapterId,
+    chapters,
     course,
     router,
     initializeCourse,
@@ -124,14 +136,14 @@ export default function ChapterEditorScreen({ params }) {
     }
 
     try {
-      // Update chapter in store
+      // Update chapter in store first
       updateChapterById(chapterId, {
         title: title.trim(),
         content,
         videoUrl: videoUrl.trim(),
       });
 
-      // Save entire course to Firebase
+      // Get updated course data from store and save to Firebase
       const courseData = getCourseData();
       await updateCourse({
         courseId,
@@ -141,7 +153,7 @@ export default function ChapterEditorScreen({ params }) {
       toast.success("Chapter saved successfully!");
       setHasLocalChanges(false);
 
-      // Refresh course data
+      // Refresh course data in store
       const updatedCourse = await getMyCourseData(courseId);
       initializeCourse(updatedCourse);
     } catch (err) {
@@ -161,6 +173,7 @@ export default function ChapterEditorScreen({ params }) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, content, videoUrl]);
 
   const handleBack = () => {

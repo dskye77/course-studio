@@ -124,6 +124,9 @@ export default function DevSingleCourseScreen({ params }) {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  useEffect(() => {
+    console.log(chapters);
+  }, [chapters]);
   const validate = () => {
     const newErrors = {};
     if (!title.trim()) newErrors.title = "Title is required";
@@ -460,7 +463,7 @@ export default function DevSingleCourseScreen({ params }) {
 
                         {chapter.content && chapter.content.length > 20 && (
                           <div className="flex items-start gap-2 text-sm text-muted-foreground bg-muted p-3 rounded-lg">
-                            <FileText className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                            <FileText className="w-4 h-4 mt-0.5 shrink-0" />
                             <div className="flex-1 min-w-0">
                               <p className="font-medium mb-1">
                                 Chapter Content
@@ -516,7 +519,7 @@ export default function DevSingleCourseScreen({ params }) {
           <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
             <CardContent className="pt-6">
               <div className="flex gap-3">
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
                     <span className="text-white text-sm">💡</span>
                   </div>
