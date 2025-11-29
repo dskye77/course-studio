@@ -1,11 +1,13 @@
 import CoursesScreen from "@/screen/courses/CoursesScreen";
+import { getPublishedCourseList } from "@/lib/firebaseCourses";
+
 export default async function CoursesPage() {
-  let courses;
+  let courses = [];
 
   try {
-    const res = await fetch("http://localhost:5500/courses.json");
-    courses = await res.json();
-  } catch {
+    courses = await getPublishedCourseList();
+  } catch (error) {
+    console.error("Error fetching courses:", error);
     courses = [];
   }
 

@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
-import { Home, BookOpen, PlusCircle, LogOut } from "lucide-react";
+import { Home, BookOpen, LogOut, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { signOut } from "@/lib/firebaseAuth";
@@ -65,6 +65,18 @@ export default function Sidebar() {
         >
           <BookOpen size={20} />
           My Courses
+        </Link>
+
+        <Link
+          href="/dev/profile"
+          className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+            pathname === "/dev/profile"
+              ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium"
+              : "hover:bg-gray-100 dark:hover:bg-gray-800"
+          }`}
+        >
+          <UserRound size={20} />
+          Profile
         </Link>
       </nav>
 

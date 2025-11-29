@@ -4,13 +4,6 @@ import SearchBar from "@/components/custom/CourseSearchBar";
 import CoursesDisplay from "@/components/custom/CourseDisplay";
 
 export default function CoursesScreen({ from = "courses", courses }) {
-  if (courses.length === 0)
-    return (
-      <div className="p-5">
-        <div className="loader">No Courses Available</div>
-      </div>
-    );
-
   return (
     <div>
       <SearchBar />
@@ -19,7 +12,10 @@ export default function CoursesScreen({ from = "courses", courses }) {
           {from === "courses" && "Published Courses"}
           {from === "dev" && "My Courses"}
         </h1>
-        <CoursesDisplay courses={courses} ignoreFilters={false} from={from} />
+        {courses.length > 0 && (
+          <CoursesDisplay courses={courses} ignoreFilters={false} from={from} />
+        )}
+        {courses.length === 0 && <h2>No Courses Available</h2>}
       </div>
     </div>
   );

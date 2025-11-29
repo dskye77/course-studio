@@ -1,17 +1,19 @@
 import HomeScreen from "@/screen/home";
-
+import { getPublishedCourseList } from "@/lib/firebaseCourses";
 
 export default async function HomePage() {
-  let popularCourses;
+  let popularCourses = [];
+
   try {
-    const res = await fetch("http://localhost:5500/courses.json");
-    const courses = await res.json();
+    const courses = await getPublishedCourseList();
+    // Sort by most recent and take top 6
     popularCourses = courses
       .sort((a, b) => b.students - a.students)
       .slice(0, 6);
-  } catch (err) {
+  } catch (error) {
+    console.error("Error fetching popular courses:", error);
     popularCourses = [];
-  } finally {
-    return <HomeScreen popularCourses={popularCourses} />;
   }
+
+  return <HomeScreen popularCourses={popularCourses} />;
 }

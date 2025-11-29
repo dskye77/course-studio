@@ -3,7 +3,7 @@ const nextConfig = {
   /* config options here */
   reactCompiler: true,
   images: {
-    domains: ["picsum.photos"],
+    domains: ["picsum.photos", "res.cloudinary.com"],
   },
 };
 
