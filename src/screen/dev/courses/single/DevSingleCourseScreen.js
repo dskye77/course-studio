@@ -104,13 +104,6 @@ export default function DevSingleCourseScreen({ params }) {
     }
   }, [user, authLoading, courseId, router, initializeCourse]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      resetCourse();
-    };
-  }, [resetCourse]);
-
   // Warn about unsaved changes
   useEffect(() => {
     const handleBeforeUnload = (e) => {
@@ -124,9 +117,6 @@ export default function DevSingleCourseScreen({ params }) {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  useEffect(() => {
-    console.log(chapters);
-  }, [chapters]);
   const validate = () => {
     const newErrors = {};
     if (!title.trim()) newErrors.title = "Title is required";

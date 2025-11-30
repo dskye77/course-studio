@@ -1,239 +1,408 @@
-// src/components/custom/RichTextEditor.jsx
 "use client";
 
-import { useRef } from "react";
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Underline from "@tiptap/extension-underline";
+import TextAlign from "@tiptap/extension-text-align";
+import Highlight from "@tiptap/extension-highlight";
+import Color from "@tiptap/extension-color";
+import { TextStyle } from "@tiptap/extension-text-style";
+import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
+import Youtube from "@tiptap/extension-youtube";
 import {
   Bold,
   Italic,
-  Underline,
   List,
   ListOrdered,
-  Image,
-  Link,
   Heading1,
   Heading2,
   Heading3,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
   Undo,
   Redo,
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Quote,
+  Code,
+  Highlighter,
+  Palette,
+  X,
 } from "lucide-react";
 
-export default function RichTextEditor({
-  content,
-  onChange,
-  disabled = false,
-}) {
-  const editorRef = useRef(null);
+export default function ChapterEditor({ initialContent = "" }) {
+  const [title, setTitle] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoPreview, setVideoPreview] = useState("");
 
-  // Execute command on selected text
-  const execCommand = (command, value = null) => {
-    document.execCommand(command, false, value);
-    editorRef.current?.focus();
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      StarterKit.configure({
+        heading: {
+          levels: [1, 2, 3],
+        },
+      }),
+      Underline,
+      TextStyle,
+      Color.configure({ types: ["textStyle"] }),
+      Highlight.configure({ multicolor: true }),
+      TextAlign.configure({ 
+        types: ["heading", "paragraph"],
+        alignments: ["left", "center", "right", "justify"],
+      }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        defaultProtocol: "https",
+      }),
+      Image.configure({
+        inline: false,
+        allowBase64: true,
+      }),
+      Youtube.configure({
+        modestBranding: true,
+        controls: true,
+        allowFullscreen: true,
+        HTMLAttributes: {
+          class: "rounded-lg w-full aspect-video my-4",
+        },
+      }),
+    ],
+
+    content: initialContent || "<p>Start writing your chapter content...</p>",
+
+    editorProps: {
+      attributes: {
+        class:
+          "prose prose-invert dark:prose-invert max-w-none focus:outline-none text-base min-h-[400px] p-4",
+      },
+    },
+
+    autofocus: "end",
+    editable: true,
+  });
+
+  const addLink = () => {
+    if (!editor) return;
+    
+    const previousUrl = editor.getAttributes("link").href;
+    const url = window.prompt("Enter URL", previousUrl);
+    
+    if (url === null) return;
+    
+    if (url === "") {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      return;
+    }
+    
+    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   };
 
-  // Handle image upload
-  const handleImageUpload = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = async (e) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        // Create a blob URL for immediate preview
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const img = `<img src="${event.target.result}" alt="Uploaded image" style="max-width: 100%; height: auto; margin: 1rem 0; border-radius: 0.5rem;" />`;
-          document.execCommand("insertHTML", false, img);
-          handleContentChange();
-        };
-        reader.readAsDataURL(file);
-      }
+  const addImage = (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !editor) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please select a valid image file");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image size must be less than 5MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      editor.chain().focus().setImage({ src: reader.result }).run();
     };
-    input.click();
+    reader.onerror = () => {
+      alert("Failed to read image file");
+    };
+    reader.readAsDataURL(file);
+    
+    e.target.value = "";
   };
 
-  // Handle link insertion
-  const handleInsertLink = () => {
-    const url = prompt("Enter URL:");
-    if (url) {
-      execCommand("createLink", url);
-      handleContentChange();
+  const addYoutubePreview = () => {
+    if (!videoUrl.trim()) {
+      alert("Please enter a YouTube URL");
+      return;
     }
+    
+    const embed = convertYoutube(videoUrl);
+    if (!embed) {
+      alert("Invalid YouTube URL. Please use a valid YouTube video URL.");
+      return;
+    }
+    
+    setVideoPreview(embed);
   };
 
-  // Handle content change
-  const handleContentChange = () => {
-    if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
-    }
+  const removeYoutubePreview = () => {
+    setVideoPreview("");
   };
+
+  const insertYoutubeInEditor = () => {
+    if (!editor || !videoUrl.trim()) return;
+    
+    const videoId = extractYoutubeId(videoUrl);
+    if (!videoId) {
+      alert("Invalid YouTube URL");
+      return;
+    }
+    
+    editor.chain().focus().setYoutubeVideo({ src: videoUrl }).run();
+    setVideoUrl("");
+    setVideoPreview("");
+  };
+
+  const handleSave = () => {
+    if (!editor) return;
+    
+    const content = editor.getHTML();
+    const data = {
+      title: title.trim(),
+      content,
+      videoUrl: videoUrl.trim(),
+      savedAt: new Date().toISOString(),
+    };
+    
+    console.log("Saving chapter:", data);
+    alert("Chapter saved successfully!\n\nCheck console for saved data.");
+  };
+
+  if (!editor) {
+    return (
+      <div className="flex items-center justify-center h-screen w-full bg-[#0e1217] text-white">
+        <div className="text-lg">Loading editor...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
-      {/* Toolbar */}
-      <div className="border-b border-gray-200 dark:border-gray-800 p-2 flex flex-wrap gap-1">
-        <ToolbarButton
-          icon={<Undo className="w-4 h-4" />}
-          onClick={() => execCommand("undo")}
+    <div className="flex flex-col h-screen w-full bg-[#0e1217] text-white overflow-hidden">
+      <div className="sticky top-0 z-50 bg-[#0e1217]/95 border-b border-white/10 backdrop-blur px-6 py-3 flex items-center gap-4">
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Chapter title"
+          className="bg-[#1a1f25] border-none text-white w-[280px] placeholder:text-gray-500"
+        />
+
+        <Input
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="YouTube URL"
+          className="bg-[#1a1f25] border-none text-white w-[260px] placeholder:text-gray-500"
+        />
+
+        <Button 
+          variant="secondary" 
+          onClick={addYoutubePreview}
+          disabled={!videoUrl.trim()}
+        >
+          Preview
+        </Button>
+
+        <Button 
+          variant="outline" 
+          onClick={insertYoutubeInEditor}
+          disabled={!videoUrl.trim()}
+        >
+          Insert Video
+        </Button>
+
+        <div className="flex-1" />
+
+        <Button onClick={handleSave}>Save Chapter</Button>
+      </div>
+
+      <div className="sticky top-[61px] z-40 bg-[#0e1217]/95 border-b border-white/10 backdrop-blur px-6 py-2 flex items-center gap-2 flex-wrap">
+        <TB
+          onClick={() => editor.chain().focus().undo().run()}
+          disabled={!editor.can().undo()}
+          icon={<Undo size={18} />}
           title="Undo"
-          disabled={disabled}
         />
-        <ToolbarButton
-          icon={<Redo className="w-4 h-4" />}
-          onClick={() => execCommand("redo")}
+        <TB
+          onClick={() => editor.chain().focus().redo().run()}
+          disabled={!editor.can().redo()}
+          icon={<Redo size={18} />}
           title="Redo"
-          disabled={disabled}
         />
 
-        <Divider />
+        <Sep />
 
-        <ToolbarButton
-          icon={<Heading1 className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("formatBlock", "<h1>");
-            handleContentChange();
-          }}
+        <TB
+          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+          active={editor.isActive("heading", { level: 1 })}
+          icon={<Heading1 size={18} />}
           title="Heading 1"
-          disabled={disabled}
         />
-        <ToolbarButton
-          icon={<Heading2 className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("formatBlock", "<h2>");
-            handleContentChange();
-          }}
+        <TB
+          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          active={editor.isActive("heading", { level: 2 })}
+          icon={<Heading2 size={18} />}
           title="Heading 2"
-          disabled={disabled}
         />
-        <ToolbarButton
-          icon={<Heading3 className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("formatBlock", "<h3>");
-            handleContentChange();
-          }}
+        <TB
+          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          active={editor.isActive("heading", { level: 3 })}
+          icon={<Heading3 size={18} />}
           title="Heading 3"
-          disabled={disabled}
         />
 
-        <Divider />
+        <Sep />
 
-        <ToolbarButton
-          icon={<Bold className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("bold");
-            handleContentChange();
-          }}
-          title="Bold (Ctrl+B)"
-          disabled={disabled}
+        <TB
+          onClick={() => editor.chain().focus().toggleBold().run()}
+          active={editor.isActive("bold")}
+          icon={<Bold size={18} />}
+          title="Bold"
         />
-        <ToolbarButton
-          icon={<Italic className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("italic");
-            handleContentChange();
-          }}
-          title="Italic (Ctrl+I)"
-          disabled={disabled}
+        <TB
+          onClick={() => editor.chain().focus().toggleItalic().run()}
+          active={editor.isActive("italic")}
+          icon={<Italic size={18} />}
+          title="Italic"
         />
-        <ToolbarButton
-          icon={<Underline className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("underline");
-            handleContentChange();
-          }}
-          title="Underline (Ctrl+U)"
-          disabled={disabled}
+        <TB
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          active={editor.isActive("underline")}
+          icon={<span className="font-bold underline text-base">U</span>}
+          title="Underline"
         />
 
-        <Divider />
+        <Sep />
 
-        <ToolbarButton
-          icon={<AlignLeft className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("justifyLeft");
-            handleContentChange();
-          }}
+        <TB
+          onClick={() => editor.chain().focus().setColor("#4ade80").run()}
+          icon={<Palette size={18} />}
+          title="Text Color (Green)"
+        />
+        <TB
+          onClick={() => editor.chain().focus().toggleHighlight().run()}
+          active={editor.isActive("highlight")}
+          icon={<Highlighter size={18} />}
+          title="Highlight"
+        />
+
+        <Sep />
+
+        <TB
+          onClick={() => editor.chain().focus().setTextAlign("left").run()}
+          active={editor.isActive({ textAlign: "left" })}
+          icon={<AlignLeft size={18} />}
           title="Align Left"
-          disabled={disabled}
         />
-        <ToolbarButton
-          icon={<AlignCenter className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("justifyCenter");
-            handleContentChange();
-          }}
+        <TB
+          onClick={() => editor.chain().focus().setTextAlign("center").run()}
+          active={editor.isActive({ textAlign: "center" })}
+          icon={<AlignCenter size={18} />}
           title="Align Center"
-          disabled={disabled}
         />
-        <ToolbarButton
-          icon={<AlignRight className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("justifyRight");
-            handleContentChange();
-          }}
+        <TB
+          onClick={() => editor.chain().focus().setTextAlign("right").run()}
+          active={editor.isActive({ textAlign: "right" })}
+          icon={<AlignRight size={18} />}
           title="Align Right"
-          disabled={disabled}
         />
 
-        <Divider />
+        <Sep />
 
-        <ToolbarButton
-          icon={<List className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("insertUnorderedList");
-            handleContentChange();
-          }}
+        <TB
+          onClick={() => editor.chain().focus().toggleBulletList().run()}
+          active={editor.isActive("bulletList")}
+          icon={<List size={18} />}
           title="Bullet List"
-          disabled={disabled}
         />
-        <ToolbarButton
-          icon={<ListOrdered className="w-4 h-4" />}
-          onClick={() => {
-            execCommand("insertOrderedList");
-            handleContentChange();
-          }}
+        <TB
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          active={editor.isActive("orderedList")}
+          icon={<ListOrdered size={18} />}
           title="Numbered List"
-          disabled={disabled}
         />
 
-        <Divider />
+        <Sep />
 
-        <ToolbarButton
-          icon={<Link className="w-4 h-4" />}
-          onClick={handleInsertLink}
-          title="Insert Link"
-          disabled={disabled}
+        <TB 
+          onClick={addLink} 
+          active={editor.isActive("link")}
+          icon={<span className="text-sm font-bold">🔗</span>}
+          title="Add Link"
         />
-        <ToolbarButton
-          icon={<Image className="w-4 h-4" />}
-          onClick={handleImageUpload}
-          title="Insert Image"
-          disabled={disabled}
+
+        <label className="cursor-pointer p-2 rounded-md hover:bg-white/10 transition" title="Upload Image">
+          <span className="text-sm">🖼️</span>
+          <input 
+            type="file" 
+            className="hidden" 
+            onChange={addImage}
+            accept="image/*"
+          />
+        </label>
+
+        <Sep />
+
+        <TB
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          active={editor.isActive("blockquote")}
+          icon={<Quote size={18} />}
+          title="Blockquote"
+        />
+        <TB
+          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+          active={editor.isActive("codeBlock")}
+          icon={<Code size={18} />}
+          title="Code Block"
         />
       </div>
 
-      {/* Editor Area */}
-      <div
-        ref={editorRef}
-        contentEditable={!disabled}
-        onInput={handleContentChange}
-        dangerouslySetInnerHTML={{ __html: content }}
-        className="min-h-[500px] p-8 outline-none focus:ring-0 prose prose-lg dark:prose-invert max-w-none"
-        style={{ caretColor: "currentColor" }}
-      />
+      {videoPreview && (
+        <div className="w-full bg-black border-b border-white/10 p-4 relative">
+          <button
+            onClick={removeYoutubePreview}
+            className="absolute top-6 right-6 z-10 p-2 bg-red-500/80 hover:bg-red-500 rounded-full transition"
+            title="Remove Preview"
+          >
+            <X size={18} />
+          </button>
+          <iframe
+            src={videoPreview}
+            className="w-full h-[360px] rounded-lg"
+            allowFullScreen
+            title="YouTube Preview"
+          ></iframe>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-auto px-6 pb-10">
+        <div className="mt-4 bg-[#11161c] rounded-xl border border-white/10 min-h-[80vh]">
+          <EditorContent editor={editor} />
+        </div>
+      </div>
     </div>
   );
 }
 
-function ToolbarButton({ icon, onClick, title, disabled }) {
+function TB({ icon, onClick, active = false, disabled = false, title }) {
   return (
     <button
       onClick={onClick}
-      title={title}
       disabled={disabled}
-      className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+      title={title}
+      className={`p-2 rounded-md transition ${
+        active 
+          ? "bg-blue-500/20 text-blue-400" 
+          : "hover:bg-white/10"
+      } ${
+        disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+      }`}
       type="button"
     >
       {icon}
@@ -241,6 +410,28 @@ function ToolbarButton({ icon, onClick, title, disabled }) {
   );
 }
 
-function Divider() {
-  return <div className="w-px h-8 bg-gray-200 dark:bg-gray-700 mx-1" />;
+function Sep() {
+  return <div className="w-px h-5 bg-white/15 mx-1" />;
+}
+
+function extractYoutubeId(url) {
+  try {
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/,
+      /youtube\.com\/embed\/([^&\n?#]+)/,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) return match[1];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function convertYoutube(url) {
+  const id = extractYoutubeId(url);
+  return id ? `https://www.youtube.com/embed/${id}` : "";
 }

@@ -59,25 +59,25 @@ export default function ChapterEditorScreen({ params }) {
         // FIXED: Check if chapter exists in store first
         let chapter = getChapterById(chapterId);
 
-        // // If chapter not in store, or course doesn't match, fetch from Firebase
-        // if (!chapter || !course || course.id !== courseId) {
-        //   console.log("Fetching course from Firebase...");
-        //   const courseData = await getMyCourseData(courseId);
+        // If chapter not in store, or course doesn't match, fetch from Firebase
+        if (!chapter || !course || course.id !== courseId) {
+          console.log("Fetching course from Firebase...");
+          const courseData = await getMyCourseData(courseId);
 
-        //   if (!courseData) {
-        //     toast.error("Course not found");
-        //     router.replace("/dev/courses");
-        //     return;
-        //   }
+          if (!courseData) {
+            toast.error("Course not found");
+            router.replace("/dev/courses");
+            return;
+          }
 
-        //   // Initialize store with course data
-        //   initializeCourse(courseData);
+          // Initialize store with course data
+          initializeCourse(courseData);
 
-        //   // Get chapter from newly loaded course
-        //   chapter = courseData.chapters?.find((ch) => ch.id === chapterId);
-        // } else {
-        //   console.log("Using chapter from store");
-        // }
+          // Get chapter from newly loaded course
+          chapter = courseData.chapters?.find((ch) => ch.id === chapterId);
+        } else {
+          console.log("Using chapter from store");
+        }
 
         // Verify chapter exists
         if (!chapter) {
@@ -269,37 +269,7 @@ export default function ChapterEditorScreen({ params }) {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto p-6">
-        {/* Title Input */}
-        <div className="mb-6">
-          <Input
-            type="text"
-            value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            placeholder="Chapter Title"
-            className="text-3xl font-bold border-none bg-transparent px-0 h-auto focus-visible:ring-0"
-            disabled={isPreview}
-          />
-        </div>
-
-        {/* Video URL */}
-        {!isPreview && (
-          <div className="mb-6">
-            <Input
-              type="url"
-              value={videoUrl}
-              onChange={(e) => handleVideoUrlChange(e.target.value)}
-              placeholder="Video URL (optional) - e.g., YouTube embed link"
-              className="mb-2"
-            />
-            {videoUrl && (
-              <p className="text-sm text-muted-foreground">
-                💡 Tip: Use YouTube embed URLs for best results
-              </p>
-            )}
-          </div>
-        )}
-
+      <div>
         {isPreview ? (
           /* Preview Mode */
           <div className="space-y-6">
@@ -333,7 +303,7 @@ export default function ChapterEditorScreen({ params }) {
             />
 
             {/* Help Text */}
-            <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+            {/* <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
               <p className="font-medium">💡 Tips:</p>
               <ul className="list-disc list-inside mt-2 space-y-1">
                 <li>
@@ -343,7 +313,7 @@ export default function ChapterEditorScreen({ params }) {
                 <li>Click the image icon to upload images inline</li>
                 <li>Press Ctrl/Cmd + S to save at any time</li>
               </ul>
-            </div>
+            </div> */}
           </>
         )}
       </div>
