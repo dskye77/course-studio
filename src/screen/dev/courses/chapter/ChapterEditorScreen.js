@@ -1,13 +1,12 @@
 // src/screen/dev/courses/chapter/ChapterEditorScreen.js
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { getMyCourseData, updateCourse } from "@/lib/firebaseCourses";
 import { useCourseEditor } from "@/stores/courseEditor";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import RichTextEditor from "@/components/custom/RichTextEditor";
@@ -22,99 +21,100 @@ export default function ChapterEditorScreen({ params }) {
   const [loading, setLoading] = useState(true);
   const [isPreview, setIsPreview] = useState(false);
 
-  // Local chapter state
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
 
-  // Zustand store
-  const chapters = useCourseEditor((state) => state.chapters);
   const {
     course,
+    chapters,
     initializeCourse,
     updateChapterById,
     getChapterById,
     getCourseData,
   } = useCourseEditor();
 
-  // Unwrap params
+  // 1) Unwrap params synchronously (no await)
   useEffect(() => {
-    const unwrapParams = async () => {
-      const unwrapped = await params;
-      setCourseId(unwrapped.id);
-      setChapterId(unwrapped.chapterId);
-    };
-    unwrapParams();
-  }, [params, chapterId]);
+    if (!params) return;
+    // Next.js route params might be e.g. { id, chapterId }
+    setCourseId(params.id ?? params.courseId ?? null);
+    setChapterId(params.chapterId ?? params.chapterId ?? null);
+  }, [params]);
 
-  // Load course and chapter
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!user || !courseId || !chapterId) return;
+  // fetchData callback (memoized to avoid recreation in useEffect)
+  const fetchData = useCallback(async () => {
+    // defensive: ensure we only run when we have user & route ids
+    if (!user || !courseId || !chapterId) return;
 
-      try {
-        setLoading(true);
+    setLoading(true);
+    try {
+      // try reading chapter from store first
+      let chapter = getChapterById(chapterId);
 
-        // FIXED: Check if chapter exists in store first
-        let chapter = getChapterById(chapterId);
-
-        // If chapter not in store, or course doesn't match, fetch from Firebase
-        if (!chapter || !course || course.id !== courseId) {
-          console.log("Fetching course from Firebase...");
-          const courseData = await getMyCourseData(courseId);
-
-          if (!courseData) {
-            toast.error("Course not found");
-            router.replace("/dev/courses");
-            return;
-          }
-
-          // Initialize store with course data
-          initializeCourse(courseData);
-
-          // Get chapter from newly loaded course
-          chapter = courseData.chapters?.find((ch) => ch.id === chapterId);
-        } else {
-          console.log("Using chapter from store");
-        }
-
-        // Verify chapter exists
-        if (!chapter) {
-          toast.error("Chapter not found");
-          router.replace(`/dev/courses/${courseId}`);
+      // if not found or store course mismatch, fetch full course from backend
+      if (!chapter || !course || course.id !== courseId) {
+        const courseData = await getMyCourseData(courseId);
+        if (!courseData) {
+          toast.error("Course not found");
+          router.replace("/dev/courses");
           return;
         }
-
-        // Initialize local state from chapter
-        setTitle(chapter.title || "");
-        setContent(
-          chapter.content || "<p>Start writing your chapter content...</p>"
-        );
-        setVideoUrl(chapter.videoUrl || "");
-        setHasLocalChanges(false);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        toast.error("Failed to load chapter");
-      } finally {
-        setLoading(false);
+        // initialize the store synchronously with fetched course
+        initializeCourse(courseData);
+        chapter = courseData.chapters?.find((ch) => ch.id === chapterId);
       }
-    };
 
-    if (!authLoading && user && courseId && chapterId) {
-      fetchData();
+      if (!chapter) {
+        toast.error("Chapter not found");
+        router.replace(`/dev/courses/${courseId}`);
+        return;
+      }
+
+      // Initialize local controlled state
+      setTitle(chapter.title || "");
+      setContent(
+        chapter.content || "<p>Start writing your chapter content...</p>"
+      );
+      setVideoUrl(chapter.videoUrl || "");
+      setHasLocalChanges(false);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      toast.error("Failed to load chapter");
+    } finally {
+      setLoading(false);
     }
   }, [
     user,
-    authLoading,
     courseId,
     chapterId,
-    chapters,
-    course,
-    router,
-    initializeCourse,
     getChapterById,
+    initializeCourse,
+    router,
+    course,
   ]);
+
+  // 2) Effect that triggers the fetch after auth and params are available
+  useEffect(() => {
+    // if auth is still loading, wait
+    if (authLoading) return;
+
+    // if auth finished and there is no user, bail and stop loading state so UI doesn't hang
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    // if params are not ready, stop showing spinner (this prevents stuck skeleton)
+    if (!courseId || !chapterId) {
+      setLoading(false);
+      return;
+    }
+
+    // All good: load data
+    fetchData();
+  }, [authLoading, user, courseId, chapterId, fetchData]);
 
   // Warn about unsaved changes
   useEffect(() => {
@@ -124,7 +124,6 @@ export default function ChapterEditorScreen({ params }) {
         e.returnValue = "";
       }
     };
-
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasLocalChanges]);
@@ -136,14 +135,12 @@ export default function ChapterEditorScreen({ params }) {
     }
 
     try {
-      // Update chapter in store first
       updateChapterById(chapterId, {
         title: title.trim(),
         content,
         videoUrl: videoUrl.trim(),
       });
 
-      // Get updated course data from store and save to Firebase
       const courseData = getCourseData();
       await updateCourse({
         courseId,
@@ -153,7 +150,7 @@ export default function ChapterEditorScreen({ params }) {
       toast.success("Chapter saved successfully!");
       setHasLocalChanges(false);
 
-      // Refresh course data in store
+      // refresh store with latest from backend
       const updatedCourse = await getMyCourseData(courseId);
       initializeCourse(updatedCourse);
     } catch (err) {
@@ -162,45 +159,26 @@ export default function ChapterEditorScreen({ params }) {
     }
   };
 
-  // Keyboard shortcut for save
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, content, videoUrl]);
-
   const handleBack = () => {
     if (hasLocalChanges) {
-      const confirm = window.confirm(
+      const confirmLeave = window.confirm(
         "You have unsaved changes. Are you sure you want to leave?"
       );
-      if (!confirm) return;
+      if (!confirmLeave) return;
     }
-    router.push(`/dev/courses/${courseId}`);
+    router.push(`/dev/courses/${courseId || ""}`);
   };
 
-  const handleContentChange = (newContent) => {
-    setContent(newContent);
+  // On-change handler from the editor (accepts { title, content, videoUrl })
+  const handleChange = (newData) => {
+    if (!newData) return;
+    setTitle(newData.title ?? title);
+    setContent(newData.content ?? content);
+    setVideoUrl(newData.videoUrl ?? videoUrl);
     setHasLocalChanges(true);
   };
 
-  const handleTitleChange = (newTitle) => {
-    setTitle(newTitle);
-    setHasLocalChanges(true);
-  };
-
-  const handleVideoUrlChange = (newUrl) => {
-    setVideoUrl(newUrl);
-    setHasLocalChanges(true);
-  };
-
+  // Show skeleton while auth or data fetching is in progress
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-8">
@@ -210,13 +188,38 @@ export default function ChapterEditorScreen({ params }) {
     );
   }
 
-  if (!course) return null;
+  // If we don't have course after loading finished, show friendly message
+  if (!course) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-xl text-center">
+          <h2 className="text-lg font-semibold mb-2">Course not found</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            We couldn&apos;t find that course. It may have been deleted or you
+            don&apos;t have access.
+          </p>
+          <div className="flex justify-center">
+            <Button onClick={() => router.push("/dev/courses")}>
+              Back to courses
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  const currentChapter = getChapterById(chapterId);
-  if (!currentChapter) return null;
+  // Safely get the current chapter (may be undefined while store updates).
+  // If it's missing we still render the editor using local state.
+  const currentChapter = getChapterById(chapterId) || {
+    id: chapterId,
+    title,
+    content,
+    videoUrl,
+    order: 0,
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+    <div className="h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
       {/* Header */}
       <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -239,6 +242,7 @@ export default function ChapterEditorScreen({ params }) {
               </p>
             </div>
           </div>
+
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -257,6 +261,7 @@ export default function ChapterEditorScreen({ params }) {
                 </>
               )}
             </Button>
+
             <Button
               onClick={handleSave}
               disabled={!hasLocalChanges}
@@ -269,10 +274,9 @@ export default function ChapterEditorScreen({ params }) {
         </div>
       </header>
 
-      <div>
+      <div className="flex-1 overflow-hidden">
         {isPreview ? (
-          /* Preview Mode */
-          <div className="space-y-6">
+          <div className="h-full overflow-auto p-8 space-y-6">
             {videoUrl && (
               <div className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm border border-gray-200 dark:border-gray-800">
                 <h3 className="text-lg font-semibold mb-4">Video</h3>
@@ -294,27 +298,17 @@ export default function ChapterEditorScreen({ params }) {
             </div>
           </div>
         ) : (
-          /* Edit Mode */
-          <>
-            <RichTextEditor
-              content={content}
-              onChange={handleContentChange}
-              disabled={false}
-            />
-
-            {/* Help Text */}
-            {/* <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-              <p className="font-medium">💡 Tips:</p>
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>
-                  Changes are tracked automatically - just click Save when ready
-                </li>
-                <li>Select text to format it with the toolbar buttons</li>
-                <li>Click the image icon to upload images inline</li>
-                <li>Press Ctrl/Cmd + S to save at any time</li>
-              </ul>
-            </div> */}
-          </>
+          <div className="h-full min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0">
+              <RichTextEditor
+                initialContent={content}
+                initialTitle={title}
+                initialVideoUrl={videoUrl}
+                onChange={handleChange}
+                disabled={false}
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>

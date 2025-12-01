@@ -7,7 +7,7 @@ import { CategorySelect, SearchInput, FilterModal } from "./SearchBarProps";
 // -------------------------
 // Main SearchBar Component
 // -------------------------
-export default function SearchBar() {
+export default function SearchBar({ type = "public" }) {
   const categories = [
     "All",
     "Programming",
@@ -43,7 +43,6 @@ export default function SearchBar() {
         <div className="flex flex-col sm:flex-row gap-3 items-center bg-muted/50 rounded-xl border p-4 shadow-sm">
           <CategorySelect categories={categories} />
           <SearchInput />
-
           <FilterModal />
         </div>
       </div>

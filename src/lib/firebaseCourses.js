@@ -1,5 +1,4 @@
 // lib/firebaseCourses.js
-
 import { auth, db } from "./firebaseClient";
 import {
   doc,
@@ -13,12 +12,15 @@ import {
   writeBatch,
 } from "firebase/firestore";
 
+// ID generator
 const makeId = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
     : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 
-// Upload image
+// ============================
+// IMAGE UPLOAD
+// ============================
 async function uploadImage(file, userId, courseId) {
   const formData = new FormData();
   formData.append("file", file);
@@ -30,13 +32,22 @@ async function uploadImage(file, userId, courseId) {
     method: "POST",
     body: formData,
   });
+
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Upload failed");
   return data.url;
 }
 
+// ============================
 // CREATE COURSE
-export async function createCourse({ title, description, price, imageFile }) {
+// ============================
+export async function createCourse({
+  title,
+  description,
+  price,
+  imageFile,
+  requirements = [],
+}) {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
 
@@ -52,6 +63,12 @@ export async function createCourse({ title, description, price, imageFile }) {
     price: Number(price),
     imageUrl,
     authorId: user.uid,
+
+    // new props
+    rating: 0,
+    students: 0,
+    requirements,
+
     chapters: [],
     published: false,
     createdAt: serverTimestamp(),
@@ -62,7 +79,9 @@ export async function createCourse({ title, description, price, imageFile }) {
   return courseData;
 }
 
-// 1. Get my courses — lightweight (NO chapters)
+// ============================
+// GET MY COURSES (light data)
+// ============================
 export async function getMyCourseList() {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
@@ -71,8 +90,9 @@ export async function getMyCourseList() {
   const snapshot = await getDocs(q);
 
   const list = [];
-  snapshot.forEach((doc) => {
-    const d = doc.data();
+
+  snapshot.forEach((docSnap) => {
+    const d = docSnap.data();
     list.push({
       id: d.id,
       title: d.title,
@@ -81,24 +101,31 @@ export async function getMyCourseList() {
       imageUrl: d.imageUrl,
       published: d.published || false,
       chaptersCount: d.chapters?.length || 0,
-      createdAt: d.createdAt,
-      updatedAt: d.updatedAt,
+
+      rating: d.rating || 0,
+      students: d.students || 0,
+
+      // FIXED: convert timestamps
+      createdAt: d.createdAt ? d.createdAt.toMillis() : null,
+      updatedAt: d.updatedAt ? d.updatedAt.toMillis() : null,
     });
   });
 
-  return list.sort(
-    (a, b) => (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0)
-  );
+  return list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
-// 2. Get published courses — lightweight (NO chapters) — public homepage
+
+// ============================
+// GET PUBLISHED COURSES (homepage)
+// ============================
 export async function getPublishedCourseList() {
   const q = query(collection(db, "publicCourses"));
   const snapshot = await getDocs(q);
 
   const list = [];
-  snapshot.forEach((doc) => {
-    const d = doc.data();
+
+  snapshot.forEach((docSnap) => {
+    const d = docSnap.data();
     list.push({
       id: d.id,
       title: d.title,
@@ -107,36 +134,54 @@ export async function getPublishedCourseList() {
       imageUrl: d.imageUrl,
       authorId: d.authorId,
       authorName: d.authorName,
-      publishedAt: d.publishedAt,
+
+      // FIXED: convert Firestore timestamp to number
+      publishedAt: d.publishedAt ? d.publishedAt.toMillis() : null,
+
+      rating: d.rating || 0,
+      students: d.students || 0,
     });
   });
 
-  return list.sort(
-    (a, b) =>
-      (b.publishedAt?.toMillis() || 0) - (a.publishedAt?.toMillis() || 0)
-  );
+  return list.sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0));
 }
 
-// 3. Get ONE of my courses — FULL data with chapters
+
+// ============================
+// GET ONE OF MY COURSES - FULL
+// ============================
 export async function getMyCourseData(courseId) {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
 
   const ref = doc(db, "users", user.uid, "courses", courseId);
   const snap = await getDoc(ref);
-
   return snap.exists() ? snap.data() : null;
 }
 
-// 4. Get ONE published course — FULL data with chapters (public course page)
+// ============================
+// GET ONE PUBLISHED COURSE - FULL
+// ============================
 export async function getPublishedCourseData(courseId) {
   const ref = doc(db, "publicCourseData", courseId);
   const snap = await getDoc(ref);
 
-  return snap.exists() ? snap.data() : null;
+  if (!snap.exists()) return null;
+
+  const d = snap.data();
+
+  return {
+    ...d,
+    publishedAt: d.publishedAt ? d.publishedAt.toMillis() : null,
+    createdAt: d.createdAt ? d.createdAt.toMillis() : null,
+    updatedAt: d.updatedAt ? d.updatedAt.toMillis() : null,
+  };
 }
 
-// PUBLISH
+
+// ============================
+// PUBLISH COURSE
+// ============================
 export async function publishCourse(courseId, authorName = "Creator") {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
@@ -145,24 +190,24 @@ export async function publishCourse(courseId, authorName = "Creator") {
   const lightRef = doc(db, "publicCourses", courseId);
   const fullRef = doc(db, "publicCourseData", courseId);
 
-  await runTransaction(db, async (transaction) => {
-    const courseSnap = await transaction.get(courseRef);
+  await runTransaction(db, async (tx) => {
+    const courseSnap = await tx.get(courseRef);
     if (!courseSnap.exists()) throw new Error("Course not found");
-    const course = courseSnap.data();
 
+    const course = courseSnap.data();
     if (course.chapters.length === 0) {
       throw new Error("Add at least one chapter before publishing");
     }
 
     const now = serverTimestamp();
 
-    transaction.update(courseRef, {
+    tx.update(courseRef, {
       published: true,
       publishedAt: now,
       updatedAt: now,
     });
 
-    transaction.set(lightRef, {
+    tx.set(lightRef, {
       id: courseId,
       title: course.title,
       description: course.description,
@@ -171,17 +216,22 @@ export async function publishCourse(courseId, authorName = "Creator") {
       authorId: user.uid,
       authorName,
       publishedAt: now,
+
+      rating: course.rating || 0,
+      students: course.students || 0,
     });
 
-    transaction.set(fullRef, {
+    tx.set(fullRef, {
       ...course,
-      publishedAt: now,
       authorName,
+      publishedAt: now,
     });
   });
 }
 
+// ============================
 // UNPUBLISH
+// ============================
 export async function unpublishCourse(courseId) {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
@@ -194,13 +244,16 @@ export async function unpublishCourse(courseId) {
     publishedAt: null,
     updatedAt: serverTimestamp(),
   });
+
   batch.delete(doc(db, "publicCourses", courseId));
   batch.delete(doc(db, "publicCourseData", courseId));
 
   await batch.commit();
 }
 
+// ============================
 // UPDATE COURSE
+// ============================
 export async function updateCourse({
   courseId,
   title,
@@ -208,158 +261,136 @@ export async function updateCourse({
   price,
   imageFile,
   chapters,
+  rating,
+  students,
+  requirements,
 }) {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
 
   const courseRef = doc(db, "users", user.uid, "courses", courseId);
-  let imageUrl = undefined;
-  if (imageFile) {
-    imageUrl = await uploadImage(imageFile, user.uid, courseId);
-  }
 
-  const updates = { updatedAt: serverTimestamp() };
+  let imageUrl;
+  if (imageFile) imageUrl = await uploadImage(imageFile, user.uid, courseId);
+
+  const updates = {
+    updatedAt: serverTimestamp(),
+  };
+
   if (title) updates.title = title.trim();
   if (description) updates.description = description.trim();
   if (price != null) updates.price = Number(price);
-  if (imageUrl) updates.imageUrl = imageUrl;
   if (chapters !== undefined) updates.chapters = chapters;
+
+  // new fields
+  if (rating != null) updates.rating = rating;
+  if (students != null) updates.students = students;
+  if (requirements) updates.requirements = requirements;
+
+  if (imageUrl) updates.imageUrl = imageUrl;
 
   await setDoc(courseRef, updates, { merge: true });
 
-  // Re-sync public if published
+  // sync with public if published
   const snap = await getDoc(courseRef);
   if (snap.data()?.published) {
     await publishCourse(courseId);
   }
 }
 
-// UPDATE CHAPTER - Updates a specific chapter within a course
+// ============================
+// CHAPTER FUNCTIONS (unchanged)
+// ============================
 export async function updateChapter(courseId, chapterId, data) {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
 
   const courseRef = doc(db, "users", user.uid, "courses", courseId);
 
-  // Get current course data
-  const courseSnap = await getDoc(courseRef);
-  if (!courseSnap.exists()) throw new Error("Course not found");
+  const snap = await getDoc(courseRef);
+  if (!snap.exists()) throw new Error("Course not found");
 
-  const courseData = courseSnap.data();
-  const chapters = courseData.chapters || [];
+  const course = snap.data();
+  const chapters = course.chapters || [];
 
-  // Find and update the chapter
-  const chapterIndex = chapters.findIndex((ch) => ch.id === chapterId);
-  if (chapterIndex === -1) throw new Error("Chapter not found");
+  const index = chapters.findIndex((c) => c.id === chapterId);
+  if (index === -1) throw new Error("Chapter not found");
 
-  // Update the chapter
-  chapters[chapterIndex] = {
-    ...chapters[chapterIndex],
+  chapters[index] = {
+    ...chapters[index],
     ...data,
     updatedAt: serverTimestamp(),
   };
 
-  // Save back to Firebase
   await setDoc(
     courseRef,
-    {
-      chapters,
-      updatedAt: serverTimestamp(),
-    },
+    { chapters, updatedAt: serverTimestamp() },
     { merge: true }
   );
 
-  // Re-sync public if published
-  const snap = await getDoc(courseRef);
   if (snap.data()?.published) {
     await publishCourse(courseId);
   }
 
-  return chapters[chapterIndex];
+  return chapters[index];
 }
 
-// GET SINGLE CHAPTER - Get one chapter from a course
 export async function getChapter(courseId, chapterId) {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
 
-  const courseRef = doc(db, "users", user.uid, "courses", courseId);
-  const courseSnap = await getDoc(courseRef);
+  const ref = doc(db, "users", user.uid, "courses", courseId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Course not found");
 
-  if (!courseSnap.exists()) throw new Error("Course not found");
-
-  const courseData = courseSnap.data();
-  const chapter = courseData.chapters?.find((ch) => ch.id === chapterId);
-
-  if (!chapter) throw new Error("Chapter not found");
-
-  return chapter;
+  const chapters = snap.data().chapters || [];
+  return chapters.find((c) => c.id === chapterId) || null;
 }
 
-// DELETE CHAPTER - Remove a chapter from a course
 export async function deleteChapter(courseId, chapterId) {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
 
-  const courseRef = doc(db, "users", user.uid, "courses", courseId);
+  const ref = doc(db, "users", user.uid, "courses", courseId);
+  const snap = await getDoc(ref);
 
-  // Get current course data
-  const courseSnap = await getDoc(courseRef);
-  if (!courseSnap.exists()) throw new Error("Course not found");
+  if (!snap.exists()) throw new Error("Course not found");
 
-  const courseData = courseSnap.data();
-  let chapters = courseData.chapters || [];
+  let chapters = snap.data().chapters || [];
+  chapters = chapters.filter((c) => c.id !== chapterId);
 
-  // Remove the chapter
-  chapters = chapters.filter((ch) => ch.id !== chapterId);
+  // reassign order
+  chapters = chapters.map((c, i) => ({ ...c, order: i }));
 
-  // Reorder remaining chapters
-  chapters = chapters.map((ch, index) => ({
-    ...ch,
-    order: index,
-  }));
-
-  // Save back to Firebase
   await setDoc(
-    courseRef,
-    {
-      chapters,
-      updatedAt: serverTimestamp(),
-    },
+    ref,
+    { chapters, updatedAt: serverTimestamp() },
     { merge: true }
   );
 
-  // Re-sync public if published
-  const snap = await getDoc(courseRef);
   if (snap.data()?.published) {
     await publishCourse(courseId);
   }
 }
 
-// REORDER CHAPTERS - Change the order of chapters
 export async function reorderChapters(courseId, reorderedChapters) {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
 
-  const courseRef = doc(db, "users", user.uid, "courses", courseId);
+  const ref = doc(db, "users", user.uid, "courses", courseId);
 
-  // Update chapter order
-  const chaptersWithOrder = reorderedChapters.map((ch, index) => ({
-    ...ch,
-    order: index,
+  const newOrder = reorderedChapters.map((c, i) => ({
+    ...c,
+    order: i,
   }));
 
   await setDoc(
-    courseRef,
-    {
-      chapters: chaptersWithOrder,
-      updatedAt: serverTimestamp(),
-    },
+    ref,
+    { chapters: newOrder, updatedAt: serverTimestamp() },
     { merge: true }
   );
 
-  // Re-sync public if published
-  const snap = await getDoc(courseRef);
+  const snap = await getDoc(ref);
   if (snap.data()?.published) {
     await publishCourse(courseId);
   }

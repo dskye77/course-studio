@@ -20,7 +20,7 @@ export default function DevCoursesPage() {
   useEffect(() => {
     const fetchCourses = async () => {
       if (!user) return;
-      
+
       try {
         setLoading(true);
         const myCourses = await getMyCourseList();
@@ -72,7 +72,8 @@ export default function DevCoursesPage() {
             No Courses Yet
           </h2>
           <p className="text-muted-foreground max-w-md">
-            You haven&apos;t created any courses yet. Start creating your first course and share your knowledge with the world!
+            You haven&apos;t created any courses yet. Start creating your first
+            course and share your knowledge with the world!
           </p>
           <Button
             size="lg"
