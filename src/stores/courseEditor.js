@@ -9,7 +9,7 @@ export const useCourseEditor = create((set, get) => ({
   title: "",
   description: "",
   price: "",
-  imageFile: null,
+  imageUrl: "", // Changed from imageFile to imageUrl
   chapters: [],
 
   // UI states
@@ -24,8 +24,8 @@ export const useCourseEditor = create((set, get) => ({
       title: courseData.title || "",
       description: courseData.description || "",
       price: courseData.price?.toString() || "",
+      imageUrl: courseData.imageUrl || "",
       chapters: courseData.chapters || [],
-      imageFile: null,
       hasUnsavedChanges: false,
     });
   },
@@ -35,7 +35,7 @@ export const useCourseEditor = create((set, get) => ({
   setDescription: (description) =>
     set({ description, hasUnsavedChanges: true }),
   setPrice: (price) => set({ price, hasUnsavedChanges: true }),
-  setImageFile: (imageFile) => set({ imageFile, hasUnsavedChanges: true }),
+  setImageUrl: (imageUrl) => set({ imageUrl, hasUnsavedChanges: true }),
 
   // Chapter management
   addChapter: () => {
@@ -100,7 +100,7 @@ export const useCourseEditor = create((set, get) => ({
   // Save states
   setIsSaving: (isSaving) => set({ isSaving }),
   setIsPublishing: (isPublishing) => set({ isPublishing }),
-  markAsSaved: () => set({ hasUnsavedChanges: false, imageFile: null }),
+  markAsSaved: () => set({ hasUnsavedChanges: false }),
 
   // Get all course data for saving
   getCourseData: () => {
@@ -109,7 +109,7 @@ export const useCourseEditor = create((set, get) => ({
       title: state.title,
       description: state.description,
       price: state.price,
-      imageFile: state.imageFile,
+      imageUrl: state.imageUrl,
       chapters: state.chapters,
     };
   },
@@ -121,7 +121,7 @@ export const useCourseEditor = create((set, get) => ({
       title: "",
       description: "",
       price: "",
-      imageFile: null,
+      imageUrl: "",
       chapters: [],
       isSaving: false,
       isPublishing: false,

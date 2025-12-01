@@ -12,6 +12,8 @@ import {
   Edit2,
   FileText,
   AlertCircle,
+  ImageIcon,
+  ExternalLink,
 } from "lucide-react";
 
 import { useState, useEffect } from "react";
@@ -31,8 +33,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import ImageUploader from "@/components/custom/ImageUploader";
 import Image from "next/image";
+import Link from "next/link";
 
 export default function DevSingleCourseScreen({ params }) {
   const { user, loading: authLoading } = useAuth();
@@ -47,7 +49,7 @@ export default function DevSingleCourseScreen({ params }) {
     title,
     description,
     price,
-    imageFile,
+    imageUrl,
     chapters,
     isSaving,
     isPublishing,
@@ -56,7 +58,7 @@ export default function DevSingleCourseScreen({ params }) {
     setTitle,
     setDescription,
     setPrice,
-    setImageFile,
+    setImageUrl,
     addChapter,
     updateChapter,
     deleteChapter,
@@ -64,7 +66,6 @@ export default function DevSingleCourseScreen({ params }) {
     setIsPublishing,
     markAsSaved,
     getCourseData,
-    resetCourse,
   } = useCourseEditor();
 
   useEffect(() => {
@@ -89,7 +90,6 @@ export default function DevSingleCourseScreen({ params }) {
           return;
         }
 
-        // Initialize store with course data
         initializeCourse(data);
       } catch (err) {
         console.error("Error fetching course:", err);
@@ -123,6 +123,7 @@ export default function DevSingleCourseScreen({ params }) {
     if (!description.trim()) newErrors.description = "Description is required";
     if (!price || Number(price) <= 0)
       newErrors.price = "Price must be greater than 0";
+    if (!imageUrl.trim()) newErrors.imageUrl = "Image URL is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -139,7 +140,7 @@ export default function DevSingleCourseScreen({ params }) {
         title: courseData.title.trim(),
         description: courseData.description.trim(),
         price: Number(courseData.price),
-        imageFile: courseData.imageFile || undefined,
+        imageUrl: courseData.imageUrl.trim(),
         chapters: courseData.chapters,
       });
 
@@ -363,39 +364,47 @@ export default function DevSingleCourseScreen({ params }) {
                 <p className="text-sm text-red-500">{errors.price}</p>
               )}
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Course Image</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {course.imageUrl && !imageFile && (
-              <div className="mb-4">
-                <p className="text-sm text-muted-foreground mb-2">
-                  Current image:
-                </p>
-                <div className="relative w-full h-64 rounded-lg overflow-hidden">
-                  <Image
-                    src={course.imageUrl}
-                    alt={course.title}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="imageUrl">Course Image URL</Label>
+                <Link href="/dev/uploads" target="_blank">
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <ImageIcon size={14} />
+                    Manage Uploads
+                    <ExternalLink size={14} />
+                  </Button>
+                </Link>
               </div>
-            )}
-            <ImageUploader
-              onImageSelect={setImageFile}
-              onImageRemove={() => setImageFile(null)}
-              disabled={isSaving}
-            />
-            {imageFile && (
-              <p className="text-sm text-muted-foreground mt-2">
-                New image selected. Click &quot;Save Changes&quot; to upload.
-              </p>
-            )}
+              <Input
+                id="imageUrl"
+                type="url"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+                disabled={isSaving}
+                className={errors.imageUrl ? "border-red-500" : ""}
+              />
+              {errors.imageUrl && (
+                <p className="text-sm text-red-500">{errors.imageUrl}</p>
+              )}
+              {imageUrl && (
+                <div className="mt-3 p-3 bg-muted rounded-lg">
+                  <p className="text-xs text-muted-foreground mb-2">Preview:</p>
+                  <div className="relative w-full h-48 rounded-lg overflow-hidden">
+                    <Image
+                      src={imageUrl}
+                      alt="Course preview"
+                      fill
+                      className="object-cover"
+                      onError={(e) => {
+                        e.target.style.display = "none";
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -504,40 +513,6 @@ export default function DevSingleCourseScreen({ params }) {
             )}
           </CardContent>
         </Card>
-
-        {chapters.length > 0 && (
-          <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-            <CardContent className="pt-6">
-              <div className="flex gap-3">
-                <div className="shrink-0">
-                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm">💡</span>
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
-                    Quick Tips
-                  </h4>
-                  <ul className="space-y-1 text-sm text-blue-800 dark:text-blue-200">
-                    <li>
-                      • Chapters are saved to store immediately - no need to
-                      click save first
-                    </li>
-                    <li>
-                      • Click the <Edit2 className="inline w-3 h-3" /> button to
-                      open the rich text editor
-                    </li>
-                    <li>• Add chapter titles before editing content</li>
-                    <li>
-                      • Click &quot;Save Changes&quot; to persist all changes to
-                      Firebase
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );

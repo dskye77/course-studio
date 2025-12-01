@@ -19,52 +19,31 @@ const makeId = () =>
     : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 
 // ============================
-// IMAGE UPLOAD
-// ============================
-async function uploadImage(file, userId, courseId) {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("userId", userId);
-  formData.append("courseId", courseId);
-  formData.append("type", "main");
-
-  const res = await fetch("/api/upload-course-image", {
-    method: "POST",
-    body: formData,
-  });
-
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Upload failed");
-  return data.url;
-}
-
-// ============================
-// CREATE COURSE
+// CREATE COURSE (URL-based)
 // ============================
 export async function createCourse({
   title,
   description,
   price,
-  imageFile,
+  imageUrl,
   requirements = [],
 }) {
   const user = auth.currentUser;
   if (!user) throw new Error("Login required");
 
+  if (!imageUrl) throw new Error("Image URL is required");
+
   const courseId = `course-${makeId()}`;
   const courseRef = doc(db, "users", user.uid, "courses", courseId);
-
-  const imageUrl = await uploadImage(imageFile, user.uid, courseId);
 
   const courseData = {
     id: courseId,
     title: title.trim(),
     description: description.trim(),
     price: Number(price),
-    imageUrl,
+    imageUrl: imageUrl.trim(),
     authorId: user.uid,
 
-    // new props
     rating: 0,
     students: 0,
     requirements,
@@ -105,7 +84,6 @@ export async function getMyCourseList() {
       rating: d.rating || 0,
       students: d.students || 0,
 
-      // FIXED: convert timestamps
       createdAt: d.createdAt ? d.createdAt.toMillis() : null,
       updatedAt: d.updatedAt ? d.updatedAt.toMillis() : null,
     });
@@ -113,7 +91,6 @@ export async function getMyCourseList() {
 
   return list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
-
 
 // ============================
 // GET PUBLISHED COURSES (homepage)
@@ -135,7 +112,6 @@ export async function getPublishedCourseList() {
       authorId: d.authorId,
       authorName: d.authorName,
 
-      // FIXED: convert Firestore timestamp to number
       publishedAt: d.publishedAt ? d.publishedAt.toMillis() : null,
 
       rating: d.rating || 0,
@@ -145,7 +121,6 @@ export async function getPublishedCourseList() {
 
   return list.sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0));
 }
-
 
 // ============================
 // GET ONE OF MY COURSES - FULL
@@ -177,7 +152,6 @@ export async function getPublishedCourseData(courseId) {
     updatedAt: d.updatedAt ? d.updatedAt.toMillis() : null,
   };
 }
-
 
 // ============================
 // PUBLISH COURSE
@@ -252,14 +226,14 @@ export async function unpublishCourse(courseId) {
 }
 
 // ============================
-// UPDATE COURSE
+// UPDATE COURSE (URL-based)
 // ============================
 export async function updateCourse({
   courseId,
   title,
   description,
   price,
-  imageFile,
+  imageUrl,
   chapters,
   rating,
   students,
@@ -270,9 +244,6 @@ export async function updateCourse({
 
   const courseRef = doc(db, "users", user.uid, "courses", courseId);
 
-  let imageUrl;
-  if (imageFile) imageUrl = await uploadImage(imageFile, user.uid, courseId);
-
   const updates = {
     updatedAt: serverTimestamp(),
   };
@@ -281,13 +252,12 @@ export async function updateCourse({
   if (description) updates.description = description.trim();
   if (price != null) updates.price = Number(price);
   if (chapters !== undefined) updates.chapters = chapters;
+  if (imageUrl) updates.imageUrl = imageUrl.trim();
 
   // new fields
   if (rating != null) updates.rating = rating;
   if (students != null) updates.students = students;
   if (requirements) updates.requirements = requirements;
-
-  if (imageUrl) updates.imageUrl = imageUrl;
 
   await setDoc(courseRef, updates, { merge: true });
 

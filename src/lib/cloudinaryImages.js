@@ -1,39 +1,40 @@
-// lib/cloudinary.js
+// lib/cloudinaryImages.js
 import { v2 as cloudinary } from "cloudinary";
 
-// Configure once – safe in server-side code (API routes, server actions, etc.)
+// Configure Cloudinary once (safe in server-side code)
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY, // secret
-  api_secret: process.env.CLOUDINARY_API_SECRET, // secret
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
   secure: true,
 });
 
-const buildPublicId = (userId, courseId, type) => {
-  return `course_studio/users/${userId}/courses/${courseId}/${type}`;
+// Helper: build the public ID path for user uploads
+const buildPublicId = (userId, imageName) => {
+  return `course_studio/users/${userId}/uploads/${imageName}`;
 };
 
-export const uploadCourseImage = ({
-  userId,
-  courseId,
-  fileBuffer,
-  filename = "image",
-  type = "main",
-}) => {
-  if (!userId || !courseId || !fileBuffer) {
+/**
+ * Upload an image to Cloudinary
+ * @param {Object} options
+ * @param {string} options.userId
+ * @param {Buffer | ArrayBuffer} options.fileBuffer
+ * @param {string} options.imageName
+ * @returns {Promise<Object>} uploaded image info
+ */
+export const uploadImage = ({ userId, fileBuffer, imageName }) => {
+  if (!userId || !fileBuffer || !imageName) {
     throw new Error("Missing required parameters");
   }
 
-  const publicId = buildPublicId(userId, courseId, type);
+  const publicId = buildPublicId(userId, imageName);
 
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        public_id: publicId, // full path including folders
+        public_id: publicId,
         overwrite: true,
         resource_type: "image",
-        // Optional: keep it clean
-        filename_override: type,
         unique_filename: false,
         use_filename: false,
       },
@@ -50,21 +51,24 @@ export const uploadCourseImage = ({
           width: result.width,
           height: result.height,
           format: result.format,
+          size: result.bytes,
+          createdAt: result.created_at,
         });
       }
     );
 
-    // Accept Buffer or ArrayBuffer
-    const buffer = Buffer.isBuffer(fileBuffer)
-      ? fileBuffer
-      : Buffer.from(fileBuffer);
-
+    const buffer = Buffer.isBuffer(fileBuffer) ? fileBuffer : Buffer.from(fileBuffer);
     uploadStream.end(buffer);
   });
 };
 
-export const deleteCourseImage = async (userId, courseId, type = "main") => {
-  const publicId = buildPublicId(userId, courseId, type);
+/**
+ * Delete an image from Cloudinary
+ * @param {string} userId
+ * @param {string} imageName
+ */
+export const deleteImage = async (userId, imageName) => {
+  const publicId = buildPublicId(userId, imageName);
 
   const result = await cloudinary.uploader.destroy(publicId, {
     resource_type: "image",
@@ -77,11 +81,16 @@ export const deleteCourseImage = async (userId, courseId, type = "main") => {
 
   return result;
 };
-// Fetch all images for a user
-export async function fetchUserUploads(userId) {
-  const result = await cloudinary.v2.api.resources({
+
+/**
+ * Fetch all images for a user
+ * @param {string} userId
+ * @returns {Promise<Array>} Array of images
+ */
+export const fetchAllImages = async (userId) => {
+  const result = await cloudinary.api.resources({
     type: "upload",
-    prefix: `users/${userId}/`,
+    prefix: `course_studio/users/${userId}/uploads/`,
     max_results: 100,
   });
 
@@ -95,4 +104,4 @@ export async function fetchUserUploads(userId) {
     size: r.bytes,
     createdAt: r.created_at,
   }));
-}
+};

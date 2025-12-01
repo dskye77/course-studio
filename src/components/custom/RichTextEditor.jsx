@@ -35,16 +35,18 @@ import {
   Highlighter,
   Palette,
   X,
+  ExternalLink,
 } from "lucide-react";
 
 export default function ChapterEditor({ initialContent = "", onChange }) {
   const [title, setTitle] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [videoPreview, setVideoPreview] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
 
-  // default colors
-  const [textColor, setTextColor] = useState("#ffffff");
-  const [highlightColor, setHighlightColor] = useState("#ffff0080");
+  // Color states
+  const [textColor, setTextColor] = useState("#000000");
+  const [highlightColor, setHighlightColor] = useState("#ffff00");
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -52,7 +54,7 @@ export default function ChapterEditor({ initialContent = "", onChange }) {
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       Underline,
       TextStyle,
-      Color.configure({ types: ["textStyle"] }), // make sure TextStyle is present
+      Color,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ["heading", "paragraph", "listItem"] }),
       Link.configure({
@@ -60,7 +62,7 @@ export default function ChapterEditor({ initialContent = "", onChange }) {
         autolink: true,
         defaultProtocol: "https",
       }),
-      Image.configure({ inline: false, allowBase64: true }),
+      Image.configure({ inline: false, allowBase64: false }),
       Youtube.configure({
         modestBranding: true,
         controls: true,
@@ -79,7 +81,7 @@ export default function ChapterEditor({ initialContent = "", onChange }) {
     },
   });
 
-  // Helper: detect heading level (accurate when caret at start)
+  // Helper: detect heading level
   const getCurrentHeadingLevel = () => {
     if (!editor) return null;
     const { from } = editor.state.selection;
@@ -87,7 +89,7 @@ export default function ChapterEditor({ initialContent = "", onChange }) {
     return node.type.name === "heading" ? node.attrs.level : null;
   };
 
-  // Keep parent app informed
+  // Notify parent of changes
   useEffect(() => {
     if (!editor || !onChange) return;
     const handler = () =>
@@ -105,14 +107,15 @@ export default function ChapterEditor({ initialContent = "", onChange }) {
     };
   }, [editor, title, videoUrl, onChange]);
 
-  // Sync color pickers with selection
+  // Sync color pickers with current selection
   useEffect(() => {
     if (!editor) return;
     const sync = () => {
-      const color = editor.getAttributes("textStyle").color || "#ffffff";
-      const hl = editor.getAttributes("highlight").color || "#ffff0080";
-      setTextColor(color);
-      setHighlightColor(hl);
+      const currentColor = editor.getAttributes("textStyle").color;
+      const currentHighlight = editor.getAttributes("highlight").color;
+
+      if (currentColor) setTextColor(currentColor);
+      if (currentHighlight) setHighlightColor(currentHighlight);
     };
     editor.on("selectionUpdate", sync);
     sync();
@@ -143,14 +146,13 @@ export default function ChapterEditor({ initialContent = "", onChange }) {
     setVideoPreview("");
   };
 
-  const addImage = (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !editor) return;
-    const reader = new FileReader();
-    reader.onload = () =>
-      editor.chain().focus().setImage({ src: reader.result }).run();
-    reader.readAsDataURL(file);
-    e.target.value = "";
+  const insertImage = () => {
+    if (!imageUrl.trim()) {
+      alert("Please enter an image URL");
+      return;
+    }
+    editor.chain().focus().setImage({ src: imageUrl.trim() }).run();
+    setImageUrl("");
   };
 
   if (!editor) {
@@ -262,31 +264,17 @@ export default function ChapterEditor({ initialContent = "", onChange }) {
         <div className="relative flex items-center rounded-md overflow-hidden border border-white/10">
           <button
             onClick={() => {
-              // Toggle between selected color and white
-              const active = editor.isActive("textStyle", { color: textColor });
-              editor.chain().focus();
-              if (active) {
-                // remove current color and set white (explicit)
-                editor.chain().focus().unsetColor().run();
-                // set white explicitly to ensure visible default; this keeps markup consistent
-                editor.chain().focus().setColor("#ffffff").run();
-              } else {
-                editor.chain().focus().setColor(textColor).run();
-              }
+              editor.chain().focus().setColor(textColor).run();
             }}
             className={`p-2 transition ${
               editor.isActive("textStyle", { color: textColor })
                 ? "bg-blue-500/40"
                 : "hover:bg-white/10"
             }`}
+            title="Apply text color"
           >
             <Palette size={18} />
           </button>
-
-          <div
-            className="h-8 w-10 border-l border-white/20"
-            style={{ backgroundColor: textColor }}
-          />
 
           <input
             type="color"
@@ -296,60 +284,62 @@ export default function ChapterEditor({ initialContent = "", onChange }) {
               setTextColor(color);
               editor.chain().focus().setColor(color).run();
             }}
-            className="absolute inset-0 opacity-0 cursor-pointer"
+            className="w-10 h-8 border-l border-white/20 cursor-pointer"
+            title="Pick text color"
           />
+
+          <button
+            onClick={() => {
+              editor.chain().focus().unsetColor().run();
+            }}
+            className="p-2 hover:bg-white/10 transition"
+            title="Remove text color"
+          >
+            <X size={14} />
+          </button>
         </div>
 
         {/* Highlight */}
         <div className="relative flex items-center rounded-md overflow-hidden border border-white/10 ml-1">
           <button
             onClick={() => {
-              const active = editor.isActive("highlight", {
-                color: highlightColor,
-              });
-              editor.chain().focus();
-              if (active) {
-                // unset highlight
-                // Note: both unsetHighlight() and unsetMark('highlight') map to removing highlight;
-                // using unsetHighlight() via chain if available
-                try {
-                  editor.chain().focus().unsetHighlight().run();
-                } catch (e) {
-                  // fallback: remove highlight mark manually
-                  editor.chain().focus().unsetMark("highlight").run();
-                }
-              } else {
-                editor
-                  .chain()
-                  .focus()
-                  .setHighlight({ color: highlightColor })
-                  .run();
-              }
+              editor
+                .chain()
+                .focus()
+                .setHighlight({ color: highlightColor })
+                .run();
             }}
             className={`p-2 transition ${
               editor.isActive("highlight")
                 ? "bg-yellow-500/40"
                 : "hover:bg-white/10"
             }`}
+            title="Apply highlight"
           >
             <Highlighter size={18} />
           </button>
 
-          <div
-            className="h-8 w-10 border-l border-white/20"
-            style={{ backgroundColor: highlightColor }}
-          />
-
           <input
             type="color"
-            value={highlightColor.slice(0, 7)}
+            value={highlightColor}
             onChange={(e) => {
-              const newColor = e.target.value + "80";
-              setHighlightColor(newColor);
-              editor.chain().focus().setHighlight({ color: newColor }).run();
+              const color = e.target.value;
+              setHighlightColor(color);
+              editor.chain().focus().setHighlight({ color }).run();
             }}
-            className="absolute inset-0 opacity-0 cursor-pointer"
+            className="w-10 h-8 border-l border-white/20 cursor-pointer"
+            title="Pick highlight color"
           />
+
+          <button
+            onClick={() => {
+              editor.chain().focus().unsetHighlight().run();
+            }}
+            className="p-2 hover:bg-white/10 transition"
+            title="Remove highlight"
+          >
+            <X size={14} />
+          </button>
         </div>
 
         <Sep />
@@ -401,16 +391,35 @@ export default function ChapterEditor({ initialContent = "", onChange }) {
           }}
         />
 
-        {/* Image */}
-        <label className="cursor-pointer rounded p-2 hover:bg-white/10">
-          <ImageIcon size={18} />
-          <input
-            type="file"
-            accept="image/*"
-            onChange={addImage}
-            className="hidden"
+        {/* Image URL Input */}
+        <div className="flex items-center gap-2 ml-2">
+          <Input
+            type="url"
+            placeholder="Image URL"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            className="w-64 h-8 bg-[#1a1f25] border-white/10 text-sm"
           />
-        </label>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={insertImage}
+            disabled={!imageUrl.trim()}
+            className="gap-1"
+          >
+            <ImageIcon size={14} />
+            Insert
+          </Button>
+          <a
+            href="/dev/uploads"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+          >
+            Uploads <ExternalLink size={12} />
+          </a>
+        </div>
+
         <Sep />
 
         {/* Quote + Code */}
@@ -467,6 +476,10 @@ export default function ChapterEditor({ initialContent = "", onChange }) {
         }
         .ProseMirror a:hover {
           color: #c4b5fd;
+        }
+        .ProseMirror mark {
+          padding: 0.125em 0.25em;
+          border-radius: 0.25em;
         }
       `}</style>
     </div>
