@@ -1,6 +1,6 @@
 "use client";
 
-import CourseHead from "./CourseHead";
+import EnhancedCoursePage from "./EnhancedCoursePage";
 
 import SearchBar from "../../../components/custom/CourseSearchBar";
 
@@ -11,7 +11,7 @@ export default function CoursePage({ course, courses }) {
 
   return (
     <div>
-      <CourseHead course={course} />
+      <EnhancedCoursePage course={course} />
       <SearchBar />
       <CoursesDisplay courses={courses} ignoreFilters={false}/>
     </div>

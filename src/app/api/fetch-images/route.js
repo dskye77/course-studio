@@ -1,23 +1,42 @@
 // src/app/api/fetch-images/route.js
 import { NextResponse } from "next/server";
 import { fetchAllImages } from "@/lib/cloudinaryImages";
+import { rateLimit } from "@/lib/apiAuth";
 
-export async function GET(req) {
+export const dynamic = "force-dynamic";
+
+export async function GET(request) {
   try {
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
     if (!userId) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 });
     }
 
-    const uploads = await fetchAllImages(userId);
+    // Rate limiting
+    if (!rateLimit(userId, 30, 60000)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please wait." },
+        { status: 429 }
+      );
+    }
 
-    return NextResponse.json({ uploads });
-  } catch (err) {
-    console.error("Fetch API error:", err);
+    const images = await fetchAllImages(userId);
+
     return NextResponse.json(
-      { error: "Failed to fetch images" },
+      { images },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      }
+    );
+  } catch (err) {
+    console.error("Fetch images API error:", err);
+    return NextResponse.json(
+      { error: err.message || "Failed to fetch images" },
       { status: 500 }
     );
   }

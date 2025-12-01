@@ -4,6 +4,8 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import Layout from "@/screen/home/Layout";
 
+import { validateEnv } from "@/lib/env";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -18,6 +20,8 @@ export const metadata = {
   title: "Course Studio",
   description: "Build Courses & Learn Anything, All in One Platform",
 };
+
+validateEnv();
 
 export default function RootLayout({ children }) {
   return (
