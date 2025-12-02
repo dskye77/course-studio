@@ -17,13 +17,22 @@ export const config = {
 
 export async function POST(request) {
   try {
-    // Get userId from query params or body
-    const url = new URL(request.url);
-    const userId = url.searchParams.get("userId");
+    // Get form data
+    const formData = await request.formData();
+    const file = formData.get("file");
+    const name = formData.get("name");
+    const userId = formData.get("userId"); // <-- read UID from form body
 
     if (!userId) {
       return NextResponse.json(
         { error: "User ID is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!file || !name) {
+      return NextResponse.json(
+        { error: "File and name are required" },
         { status: 400 }
       );
     }
@@ -33,18 +42,6 @@ export async function POST(request) {
       return NextResponse.json(
         { error: "Too many requests. Please wait a minute." },
         { status: 429 }
-      );
-    }
-
-    // Get form data
-    const formData = await request.formData();
-    const file = formData.get("file");
-    const name = formData.get("name");
-
-    if (!file || !name) {
-      return NextResponse.json(
-        { error: "File and name are required" },
-        { status: 400 }
       );
     }
 

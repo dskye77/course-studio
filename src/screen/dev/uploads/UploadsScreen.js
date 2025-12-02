@@ -19,8 +19,11 @@ import {
   ImageIcon,
   ExternalLink,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function UploadsScreen() {
+  const router = useRouter();
+
   const { user, loading: authLoading } = useAuth();
   const [uploads, setUploads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -125,7 +128,9 @@ export default function UploadsScreen() {
   // LOAD ON MOUNT
   // ======================
   useEffect(() => {
-    if (!authLoading && user) fetchUploads();
+    if (!authLoading && user) {
+      fetchUploads();
+    }
   }, [user, authLoading]);
 
   if (authLoading || loading) {
@@ -216,8 +221,8 @@ export default function UploadsScreen() {
               <Card key={upload.publicId} className="overflow-hidden">
                 <div className="relative h-48 bg-gray-200 dark:bg-gray-800">
                   <Image
-                    src={upload.url}
-                    alt={upload.name}
+                    src={upload?.url || ""}
+                    alt={upload?.name || "undefined"}
                     fill
                     className="object-cover"
                   />
