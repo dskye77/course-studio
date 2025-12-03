@@ -133,43 +133,47 @@ export default function EnhancedCoursePage({ course, relatedCourses = [] }) {
         ref: config.ref,
         metadata: config.metadata,
 
-        callback: async (response) => {
+        callback: (response) => {
           console.log("Payment successful:", response);
-          try {
-            const verified = await verifyPaystackPayment(response.reference);
 
-            if (!verified) throw new Error("Payment verification failed");
+          // Handle async operations without making callback async
+          verifyPaystackPayment(response.reference)
+            .then((verified) => {
+              if (!verified) throw new Error("Payment verification failed");
 
-            await completePurchase(
-              course.id,
-              {
-                title: course.title,
-                price: course.price,
-                imageUrl: course.imageUrl,
-                authorId: course.authorId,
-                authorName: course.authorName,
-              },
-              {
-                reference: verified.reference,
-                method: "paystack",
-                amount: verified.amount,
-              }
-            );
-
-            toast.success("Payment successful! 🎉");
-            setIsPurchased(true);
-
-            setTimeout(() => {
-              router.push(
-                `/learn/${course.id}/chapter/${course.chapters[0]?.id}`
+              return completePurchase(
+                course.id,
+                {
+                  title: course.title,
+                  price: course.price,
+                  imageUrl: course.imageUrl,
+                  authorId: course.authorId,
+                  authorName: course.authorName,
+                },
+                {
+                  reference: verified.reference,
+                  method: "paystack",
+                  amount: verified.amount,
+                }
               );
-            }, 1500);
-          } catch (error) {
-            console.error("Verification error:", error);
-            toast.error(error.message || "Could not verify payment");
-          } finally {
-            setPurchasing(false);
-          }
+            })
+            .then(() => {
+              toast.success("Payment successful! 🎉");
+              setIsPurchased(true);
+
+              setTimeout(() => {
+                router.push(
+                  `/learn/${course.id}/chapter/${course.chapters[0]?.id}`
+                );
+              }, 1500);
+            })
+            .catch((error) => {
+              console.error("Verification error:", error);
+              toast.error(error.message || "Could not verify payment");
+            })
+            .finally(() => {
+              setPurchasing(false);
+            });
         },
 
         onClose: () => {
