@@ -1,5 +1,9 @@
+// src/app/layout.js
+// Updated to include Paystack script
+
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Script from "next/script";
 
 import { Providers } from "@/components/providers";
 import Layout from "@/screen/home/Layout";
@@ -26,6 +30,13 @@ validateEnv();
 export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Paystack Inline Script */}
+        <Script
+          src="https://js.paystack.co/v1/inline.js"
+          strategy="beforeInteractive"
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

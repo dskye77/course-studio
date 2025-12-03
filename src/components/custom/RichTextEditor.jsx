@@ -1,9 +1,8 @@
 // "use client";
 
-// import { useState, useEffect } from "react";
+// import { useState, useEffect, useCallback } from "react";
 // import { Button } from "@/components/ui/button";
 // import { Input } from "@/components/ui/input";
-
 // import { useEditor, EditorContent } from "@tiptap/react";
 // import StarterKit from "@tiptap/starter-kit";
 // import Underline from "@tiptap/extension-underline";
@@ -14,7 +13,6 @@
 // import Link from "@tiptap/extension-link";
 // import Image from "@tiptap/extension-image";
 // import Youtube from "@tiptap/extension-youtube";
-
 // import {
 //   Bold,
 //   Italic,
@@ -36,33 +34,53 @@
 //   Palette,
 //   X,
 //   ExternalLink,
+//   Unlink,
 // } from "lucide-react";
 
-// export default function ChapterEditor({ initialContent = "", onChange }) {
-//   const [title, setTitle] = useState("");
-//   const [videoUrl, setVideoUrl] = useState("");
+// export default function ImprovedRichTextEditor({
+//   initialContent = "",
+//   initialTitle = "",
+//   initialVideoUrl = "",
+//   onChange,
+//   disabled = false,
+// }) {
+//   const [title, setTitle] = useState(initialTitle);
+//   const [videoUrl, setVideoUrl] = useState(initialVideoUrl);
 //   const [videoPreview, setVideoPreview] = useState("");
 //   const [imageUrl, setImageUrl] = useState("");
-
-//   // Color states
 //   const [textColor, setTextColor] = useState("#000000");
 //   const [highlightColor, setHighlightColor] = useState("#ffff00");
+//   const [linkUrl, setLinkUrl] = useState("");
+//   const [showLinkInput, setShowLinkInput] = useState(false);
 
 //   const editor = useEditor({
 //     immediatelyRender: false,
 //     extensions: [
-//       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+//       StarterKit.configure({
+//         heading: { levels: [1, 2, 3] },
+//       }),
 //       Underline,
 //       TextStyle,
 //       Color,
 //       Highlight.configure({ multicolor: true }),
-//       TextAlign.configure({ types: ["heading", "paragraph", "listItem"] }),
+//       TextAlign.configure({
+//         types: ["heading", "paragraph", "listItem"],
+//       }),
 //       Link.configure({
 //         openOnClick: false,
 //         autolink: true,
 //         defaultProtocol: "https",
+//         HTMLAttributes: {
+//           class: "text-blue-600 underline hover:text-blue-800",
+//         },
 //       }),
-//       Image.configure({ inline: false, allowBase64: false }),
+//       Image.configure({
+//         inline: false,
+//         allowBase64: false,
+//         HTMLAttributes: {
+//           class: "max-w-full h-auto rounded-lg my-4",
+//         },
+//       }),
 //       Youtube.configure({
 //         modestBranding: true,
 //         controls: true,
@@ -76,67 +94,54 @@
 //     editorProps: {
 //       attributes: {
 //         class:
-//           "ProseMirror prose prose-lg dark:prose-invert max-w-none focus:outline-none min-h-full p-6 pb-32 outline-none",
+//           "prose prose-lg dark:prose-invert max-w-none focus:outline-none min-h-[500px] p-6",
 //       },
 //     },
 //   });
 
-//   // Helper: detect heading level
-//   const getCurrentHeadingLevel = () => {
-//     if (!editor) return null;
-//     const { from } = editor.state.selection;
-//     const node = editor.state.doc.resolve(from).parent;
-//     return node.type.name === "heading" ? node.attrs.level : null;
-//   };
-
-//   // Notify parent of changes
+//   // Notify parent of changes with debounce
 //   useEffect(() => {
 //     if (!editor || !onChange) return;
-//     const handler = () =>
+
+//     const timeoutId = setTimeout(() => {
 //       onChange({
 //         title,
 //         videoUrl,
 //         content: editor.getHTML(),
 //       });
-//     editor.on("update", handler);
-//     editor.on("selectionUpdate", handler);
-//     handler();
-//     return () => {
-//       editor.off("update", handler);
-//       editor.off("selectionUpdate", handler);
-//     };
+//     }, 500); // Debounce for 500ms
+
+//     return () => clearTimeout(timeoutId);
 //   }, [editor, title, videoUrl, onChange]);
 
-//   // Sync color pickers with current selection
+//   // Update editor when content changes
 //   useEffect(() => {
-//     if (!editor) return;
-//     const sync = () => {
-//       const currentColor = editor.getAttributes("textStyle").color;
-//       const currentHighlight = editor.getAttributes("highlight").color;
+//     if (editor && editor.getHTML() !== editor.getHTML()) {
+//       editor.commands.setContent(initialContent);
+//     }
+//   }, [initialContent, editor]);
 
-//       if (currentColor) setTextColor(currentColor);
-//       if (currentHighlight) setHighlightColor(currentHighlight);
-//     };
-//     editor.on("selectionUpdate", sync);
-//     sync();
-//     return () => editor.off("selectionUpdate", sync);
+//   const getCurrentHeadingLevel = useCallback(() => {
+//     if (!editor) return null;
+//     const { from } = editor.state.selection;
+//     const node = editor.state.doc.resolve(from).parent;
+//     return node.type.name === "heading" ? node.attrs.level : null;
 //   }, [editor]);
 
-//   // YouTube helpers
 //   const extractYoutubeId = (url) => {
 //     const match = url.match(
 //       /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/
 //     );
 //     return match ? match[1] : null;
 //   };
-//   const convertYoutube = (url) => {
-//     const id = extractYoutubeId(url);
-//     return id ? `https://www.youtube.com/embed/${id}` : "";
-//   };
 
-//   const insertYoutube = () => {
+//   const insertYoutube = useCallback(() => {
+//     if (!editor) return;
 //     const id = extractYoutubeId(videoUrl);
-//     if (!id) return alert("Invalid YouTube URL");
+//     if (!id) {
+//       alert("Invalid YouTube URL");
+//       return;
+//     }
 //     editor
 //       .chain()
 //       .focus()
@@ -144,20 +149,40 @@
 //       .run();
 //     setVideoUrl("");
 //     setVideoPreview("");
-//   };
+//   }, [editor, videoUrl]);
 
-//   const insertImage = () => {
-//     if (!imageUrl.trim()) {
+//   const insertImage = useCallback(() => {
+//     if (!editor || !imageUrl.trim()) {
 //       alert("Please enter an image URL");
 //       return;
 //     }
 //     editor.chain().focus().setImage({ src: imageUrl.trim() }).run();
 //     setImageUrl("");
-//   };
+//   }, [editor, imageUrl]);
+
+//   const setLink = useCallback(() => {
+//     if (!editor) return;
+
+//     if (!linkUrl) {
+//       editor.chain().focus().unsetLink().run();
+//       setShowLinkInput(false);
+//       return;
+//     }
+
+//     // Validate and add protocol if needed
+//     let url = linkUrl.trim();
+//     if (!url.startsWith("http://") && !url.startsWith("https://")) {
+//       url = "https://" + url;
+//     }
+
+//     editor.chain().focus().setLink({ href: url }).run();
+//     setLinkUrl("");
+//     setShowLinkInput(false);
+//   }, [editor, linkUrl]);
 
 //   if (!editor) {
 //     return (
-//       <div className="flex h-screen items-center justify-center bg-[#0e1217] text-white">
+//       <div className="flex h-screen items-center justify-center bg-gray-900 text-white">
 //         Loading editor...
 //       </div>
 //     );
@@ -166,26 +191,34 @@
 //   const headingLevel = getCurrentHeadingLevel();
 
 //   return (
-//     <div className="flex h-screen flex-col overflow-hidden bg-[#0e1217] text-white">
-//       {/* Title & Video */}
+//     <div className="flex h-full flex-col overflow-hidden bg-[#0e1217] text-white">
+//       {/* Title & Video URL */}
 //       <div className="sticky top-0 z-50 flex flex-wrap items-center gap-3 border-b border-white/10 bg-[#0e1217]/95 px-6 py-3 backdrop-blur">
 //         <Input
 //           value={title}
 //           onChange={(e) => setTitle(e.target.value)}
 //           placeholder="Chapter title"
+//           disabled={disabled}
 //           className="w-80 bg-[#1a1f25] border-none text-white placeholder:text-gray-500"
 //         />
 //         <Input
 //           value={videoUrl}
 //           onChange={(e) => setVideoUrl(e.target.value)}
 //           placeholder="YouTube URL (optional)"
+//           disabled={disabled}
 //           className="w-72 bg-[#1a1f25] border-none text-white placeholder:text-gray-500"
 //         />
 //         <Button
 //           variant="secondary"
 //           size="sm"
-//           onClick={() => setVideoPreview(convertYoutube(videoUrl) || "")}
-//           disabled={!videoUrl.trim()}
+//           onClick={() =>
+//             setVideoPreview(
+//               extractYoutubeId(videoUrl)
+//                 ? `https://www.youtube.com/embed/${extractYoutubeId(videoUrl)}`
+//                 : ""
+//             )
+//           }
+//           disabled={!videoUrl.trim() || disabled}
 //         >
 //           Preview
 //         </Button>
@@ -193,7 +226,7 @@
 //           variant="outline"
 //           size="sm"
 //           onClick={insertYoutube}
-//           disabled={!videoUrl.trim()}
+//           disabled={!videoUrl.trim() || disabled}
 //         >
 //           Insert Video
 //         </Button>
@@ -204,20 +237,21 @@
 //         <TB
 //           icon={<Undo size={18} />}
 //           onClick={() => editor.chain().focus().undo().run()}
-//           disabled={!editor.can().undo()}
+//           disabled={!editor.can().undo() || disabled}
 //         />
 //         <TB
 //           icon={<Redo size={18} />}
 //           onClick={() => editor.chain().focus().redo().run()}
-//           disabled={!editor.can().redo()}
+//           disabled={!editor.can().redo() || disabled}
 //         />
 //         <Sep />
 
-//         {/* P / H1 / H2 / H3 */}
+//         {/* Headings */}
 //         <TB
 //           icon={<span className="font-bold text-sm">P</span>}
 //           active={headingLevel === null}
 //           onClick={() => editor.chain().focus().setParagraph().run()}
+//           disabled={disabled}
 //         />
 //         <TB
 //           icon={<Heading1 size={20} />}
@@ -225,6 +259,7 @@
 //           onClick={() =>
 //             editor.chain().focus().toggleHeading({ level: 1 }).run()
 //           }
+//           disabled={disabled}
 //         />
 //         <TB
 //           icon={<Heading2 size={20} />}
@@ -232,6 +267,7 @@
 //           onClick={() =>
 //             editor.chain().focus().toggleHeading({ level: 2 }).run()
 //           }
+//           disabled={disabled}
 //         />
 //         <TB
 //           icon={<Heading3 size={20} />}
@@ -239,61 +275,56 @@
 //           onClick={() =>
 //             editor.chain().focus().toggleHeading({ level: 3 }).run()
 //           }
+//           disabled={disabled}
 //         />
 //         <Sep />
 
-//         {/* Inline formatting */}
+//         {/* Text Formatting */}
 //         <TB
 //           icon={<Bold size={18} />}
 //           active={editor.isActive("bold")}
 //           onClick={() => editor.chain().focus().toggleBold().run()}
+//           disabled={disabled}
 //         />
 //         <TB
 //           icon={<Italic size={18} />}
 //           active={editor.isActive("italic")}
 //           onClick={() => editor.chain().focus().toggleItalic().run()}
+//           disabled={disabled}
 //         />
 //         <TB
 //           icon={<span className="font-bold underline">U</span>}
 //           active={editor.isActive("underline")}
 //           onClick={() => editor.chain().focus().toggleUnderline().run()}
+//           disabled={disabled}
 //         />
 //         <Sep />
 
 //         {/* Text Color */}
 //         <div className="relative flex items-center rounded-md overflow-hidden border border-white/10">
 //           <button
-//             onClick={() => {
-//               editor.chain().focus().setColor(textColor).run();
-//             }}
-//             className={`p-2 transition ${
-//               editor.isActive("textStyle", { color: textColor })
-//                 ? "bg-blue-500/40"
-//                 : "hover:bg-white/10"
-//             }`}
+//             onClick={() => editor.chain().focus().setColor(textColor).run()}
+//             className="p-2 transition hover:bg-white/10"
+//             disabled={disabled}
 //             title="Apply text color"
 //           >
 //             <Palette size={18} />
 //           </button>
-
 //           <input
 //             type="color"
 //             value={textColor}
 //             onChange={(e) => {
-//               const color = e.target.value;
-//               setTextColor(color);
-//               editor.chain().focus().setColor(color).run();
+//               setTextColor(e.target.value);
+//               editor.chain().focus().setColor(e.target.value).run();
 //             }}
+//             disabled={disabled}
 //             className="w-10 h-8 border-l border-white/20 cursor-pointer"
-//             title="Pick text color"
 //           />
-
 //           <button
-//             onClick={() => {
-//               editor.chain().focus().unsetColor().run();
-//             }}
+//             onClick={() => editor.chain().focus().unsetColor().run()}
 //             className="p-2 hover:bg-white/10 transition"
-//             title="Remove text color"
+//             disabled={disabled}
+//             title="Remove color"
 //           >
 //             <X size={14} />
 //           </button>
@@ -302,46 +333,42 @@
 //         {/* Highlight */}
 //         <div className="relative flex items-center rounded-md overflow-hidden border border-white/10 ml-1">
 //           <button
-//             onClick={() => {
+//             onClick={() =>
 //               editor
 //                 .chain()
 //                 .focus()
 //                 .setHighlight({ color: highlightColor })
-//                 .run();
-//             }}
-//             className={`p-2 transition ${
-//               editor.isActive("highlight")
-//                 ? "bg-yellow-500/40"
-//                 : "hover:bg-white/10"
-//             }`}
-//             title="Apply highlight"
+//                 .run()
+//             }
+//             className="p-2 transition hover:bg-white/10"
+//             disabled={disabled}
+//             title="Highlight"
 //           >
 //             <Highlighter size={18} />
 //           </button>
-
 //           <input
 //             type="color"
 //             value={highlightColor}
 //             onChange={(e) => {
-//               const color = e.target.value;
-//               setHighlightColor(color);
-//               editor.chain().focus().setHighlight({ color }).run();
+//               setHighlightColor(e.target.value);
+//               editor
+//                 .chain()
+//                 .focus()
+//                 .setHighlight({ color: e.target.value })
+//                 .run();
 //             }}
+//             disabled={disabled}
 //             className="w-10 h-8 border-l border-white/20 cursor-pointer"
-//             title="Pick highlight color"
 //           />
-
 //           <button
-//             onClick={() => {
-//               editor.chain().focus().unsetHighlight().run();
-//             }}
+//             onClick={() => editor.chain().focus().unsetHighlight().run()}
 //             className="p-2 hover:bg-white/10 transition"
+//             disabled={disabled}
 //             title="Remove highlight"
 //           >
 //             <X size={14} />
 //           </button>
 //         </div>
-
 //         <Sep />
 
 //         {/* Alignment */}
@@ -349,16 +376,19 @@
 //           icon={<AlignLeft size={18} />}
 //           active={editor.isActive({ textAlign: "left" })}
 //           onClick={() => editor.chain().focus().setTextAlign("left").run()}
+//           disabled={disabled}
 //         />
 //         <TB
 //           icon={<AlignCenter size={18} />}
 //           active={editor.isActive({ textAlign: "center" })}
 //           onClick={() => editor.chain().focus().setTextAlign("center").run()}
+//           disabled={disabled}
 //         />
 //         <TB
 //           icon={<AlignRight size={18} />}
 //           active={editor.isActive({ textAlign: "right" })}
 //           onClick={() => editor.chain().focus().setTextAlign("right").run()}
+//           disabled={disabled}
 //         />
 //         <Sep />
 
@@ -367,44 +397,73 @@
 //           icon={<List size={18} />}
 //           active={editor.isActive("bulletList")}
 //           onClick={() => editor.chain().focus().toggleBulletList().run()}
+//           disabled={disabled}
 //         />
 //         <TB
 //           icon={<ListOrdered size={18} />}
 //           active={editor.isActive("orderedList")}
 //           onClick={() => editor.chain().focus().toggleOrderedList().run()}
+//           disabled={disabled}
 //         />
 //         <Sep />
 
 //         {/* Link */}
-//         <TB
-//           icon={<Link2 size={18} />}
-//           active={editor.isActive("link")}
-//           onClick={() => {
-//             const url = prompt(
-//               "Enter URL",
-//               editor.getAttributes("link").href || "https://"
-//             );
-//             if (url === null) return;
-//             url
-//               ? editor.chain().focus().setLink({ href: url }).run()
-//               : editor.chain().focus().unsetLink().run();
-//           }}
-//         />
+//         {showLinkInput ? (
+//           <div className="flex items-center gap-2">
+//             <Input
+//               value={linkUrl}
+//               onChange={(e) => setLinkUrl(e.target.value)}
+//               placeholder="https://example.com"
+//               className="w-64 h-8 bg-[#1a1f25] border-white/10 text-sm"
+//               onKeyDown={(e) => {
+//                 if (e.key === "Enter") setLink();
+//                 if (e.key === "Escape") setShowLinkInput(false);
+//               }}
+//             />
+//             <Button size="sm" onClick={setLink} disabled={disabled}>
+//               Set
+//             </Button>
+//             <Button
+//               size="sm"
+//               variant="ghost"
+//               onClick={() => setShowLinkInput(false)}
+//             >
+//               <X size={14} />
+//             </Button>
+//           </div>
+//         ) : (
+//           <>
+//             <TB
+//               icon={<Link2 size={18} />}
+//               active={editor.isActive("link")}
+//               onClick={() => setShowLinkInput(true)}
+//               disabled={disabled}
+//             />
+//             {editor.isActive("link") && (
+//               <TB
+//                 icon={<Unlink size={18} />}
+//                 onClick={() => editor.chain().focus().unsetLink().run()}
+//                 disabled={disabled}
+//               />
+//             )}
+//           </>
+//         )}
 
-//         {/* Image URL Input */}
+//         {/* Image */}
 //         <div className="flex items-center gap-2 ml-2">
 //           <Input
 //             type="url"
 //             placeholder="Image URL"
 //             value={imageUrl}
 //             onChange={(e) => setImageUrl(e.target.value)}
+//             disabled={disabled}
 //             className="w-64 h-8 bg-[#1a1f25] border-white/10 text-sm"
 //           />
 //           <Button
 //             size="sm"
 //             variant="outline"
 //             onClick={insertImage}
-//             disabled={!imageUrl.trim()}
+//             disabled={!imageUrl.trim() || disabled}
 //             className="gap-1"
 //           >
 //             <ImageIcon size={14} />
@@ -419,19 +478,20 @@
 //             Uploads <ExternalLink size={12} />
 //           </a>
 //         </div>
-
 //         <Sep />
 
-//         {/* Quote + Code */}
+//         {/* Quote & Code */}
 //         <TB
 //           icon={<Quote size={18} />}
 //           active={editor.isActive("blockquote")}
 //           onClick={() => editor.chain().focus().toggleBlockquote().run()}
+//           disabled={disabled}
 //         />
 //         <TB
 //           icon={<Code size={18} />}
 //           active={editor.isActive("codeBlock")}
 //           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+//           disabled={disabled}
 //         />
 //       </div>
 
@@ -453,7 +513,7 @@
 //         </div>
 //       )}
 
-//       {/* Editor content */}
+//       {/* Editor Content */}
 //       <div className="flex-1 overflow-y-auto px-6 py-4">
 //         <div className="min-h-full rounded-xl border border-white/10 bg-[#11161c] p-2">
 //           <EditorContent editor={editor} />
@@ -463,12 +523,24 @@
 //       <style jsx global>{`
 //         .ProseMirror h1 {
 //           color: #60a5fa;
+//           font-size: 2em;
+//           font-weight: bold;
+//           margin-top: 0.5em;
+//           margin-bottom: 0.5em;
 //         }
 //         .ProseMirror h2 {
 //           color: #93c5fd;
+//           font-size: 1.5em;
+//           font-weight: bold;
+//           margin-top: 0.5em;
+//           margin-bottom: 0.5em;
 //         }
 //         .ProseMirror h3 {
 //           color: #bfdbfe;
+//           font-size: 1.25em;
+//           font-weight: bold;
+//           margin-top: 0.5em;
+//           margin-bottom: 0.5em;
 //         }
 //         .ProseMirror a {
 //           color: #a78bfa;
@@ -481,14 +553,35 @@
 //           padding: 0.125em 0.25em;
 //           border-radius: 0.25em;
 //         }
+//         .ProseMirror img {
+//           max-width: 100%;
+//           height: auto;
+//           border-radius: 0.5rem;
+//           margin: 1rem 0;
+//         }
+//         .ProseMirror blockquote {
+//           border-left: 4px solid #60a5fa;
+//           padding-left: 1rem;
+//           margin-left: 0;
+//           font-style: italic;
+//           color: #9ca3af;
+//         }
+//         .ProseMirror pre {
+//           background: #1f2937;
+//           border-radius: 0.5rem;
+//           padding: 1rem;
+//           overflow-x: auto;
+//         }
+//         .ProseMirror code {
+//           background: #374151;
+//           padding: 0.125rem 0.25rem;
+//           border-radius: 0.25rem;
+//           font-family: monospace;
+//         }
 //       `}</style>
 //     </div>
 //   );
 // }
-
-// /* ----------------------------- */
-// /* Small UI helpers              */
-// /* ----------------------------- */
 
 // function TB({ icon, onClick, active = false, disabled = false }) {
 //   return (
@@ -497,7 +590,7 @@
 //       disabled={disabled}
 //       className={`rounded-md p-2 transition-all ${
 //         active
-//           ? "bg-blue-500/30 text-blue-400 border border-blue-500/50 shadow-sm shadow-blue-500/20"
+//           ? "bg-blue-500/30 text-blue-400 border border-blue-500/50"
 //           : "hover:bg-white/10 text-gray-300"
 //       } ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
 //     >
@@ -510,7 +603,8 @@
 //   return <div className="mx-1 h-6 w-px bg-white/20" />;
 // }
 
-// src/components/custom/ImprovedRichTextEditor.jsx
+// src/components/custom/RichTextEditor.jsx
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -526,6 +620,10 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import Link from "@tiptap/extension-link";
 import Image from "@tiptap/extension-image";
 import Youtube from "@tiptap/extension-youtube";
+import BulletList from "@tiptap/extension-bullet-list";
+import OrderedList from "@tiptap/extension-ordered-list";
+import ListItem from "@tiptap/extension-list-item";
+
 import {
   Bold,
   Italic,
@@ -571,13 +669,32 @@ export default function ImprovedRichTextEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        bulletList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
+        orderedList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
       }),
+      BulletList.configure({
+        HTMLAttributes: {
+          class: "list-disc list-inside my-2",
+        },
+      }),
+      OrderedList.configure({
+        HTMLAttributes: {
+          class: "list-decimal list-inside my-2",
+        },
+      }),
+      ListItem,
       Underline,
       TextStyle,
       Color,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({
-        types: ["heading", "paragraph", "listItem"],
+        types: ["heading", "paragraph"],
       }),
       Link.configure({
         openOnClick: false,
@@ -622,14 +739,14 @@ export default function ImprovedRichTextEditor({
         videoUrl,
         content: editor.getHTML(),
       });
-    }, 500); // Debounce for 500ms
+    }, 300);
 
     return () => clearTimeout(timeoutId);
   }, [editor, title, videoUrl, onChange]);
 
-  // Update editor when content changes
+  // Sync editor content when initialContent changes
   useEffect(() => {
-    if (editor && editor.getHTML() !== editor.getHTML()) {
+    if (editor && initialContent && editor.getHTML() !== initialContent) {
       editor.commands.setContent(initialContent);
     }
   }, [initialContent, editor]);
@@ -682,7 +799,6 @@ export default function ImprovedRichTextEditor({
       return;
     }
 
-    // Validate and add protocol if needed
     let url = linkUrl.trim();
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       url = "https://" + url;
@@ -905,18 +1021,20 @@ export default function ImprovedRichTextEditor({
         />
         <Sep />
 
-        {/* Lists */}
+        {/* Lists - FIXED */}
         <TB
           icon={<List size={18} />}
           active={editor.isActive("bulletList")}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           disabled={disabled}
+          title="Bullet List"
         />
         <TB
           icon={<ListOrdered size={18} />}
           active={editor.isActive("orderedList")}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           disabled={disabled}
+          title="Numbered List"
         />
         <Sep />
 
@@ -1091,16 +1209,35 @@ export default function ImprovedRichTextEditor({
           border-radius: 0.25rem;
           font-family: monospace;
         }
+        .ProseMirror ul {
+          list-style-type: disc;
+          list-style-position: inside;
+          margin: 0.5rem 0;
+          padding-left: 1rem;
+        }
+        .ProseMirror ol {
+          list-style-type: decimal;
+          list-style-position: inside;
+          margin: 0.5rem 0;
+          padding-left: 1rem;
+        }
+        .ProseMirror li {
+          margin: 0.25rem 0;
+        }
+        .ProseMirror li p {
+          display: inline;
+        }
       `}</style>
     </div>
   );
 }
 
-function TB({ icon, onClick, active = false, disabled = false }) {
+function TB({ icon, onClick, active = false, disabled = false, title = "" }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`rounded-md p-2 transition-all ${
         active
           ? "bg-blue-500/30 text-blue-400 border border-blue-500/50"

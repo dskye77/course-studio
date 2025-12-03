@@ -1,4 +1,5 @@
 // src/lib/env.js
+
 /**
  * Environment variable validation
  * Run this at build time to catch missing variables early
@@ -19,26 +20,50 @@ const requiredEnvVars = {
   // Cloudinary (private - server only)
   CLOUDINARY_API_KEY: "Cloudinary API Key",
   CLOUDINARY_API_SECRET: "Cloudinary API Secret",
+
+  // Paystack (public)
+  NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: "Paystack Public Key",
+};
+
+const optionalEnvVars = {
+  // Paystack secret key (for backend verification - optional for now)
+  PAYSTACK_SECRET_KEY: "Paystack Secret Key",
 };
 
 export function validateEnv() {
   const missing = [];
+  const warnings = [];
 
+  // Check required variables
   for (const [key, description] of Object.entries(requiredEnvVars)) {
     if (!process.env[key]) {
       missing.push(`${key} (${description})`);
     }
   }
 
+  // Check optional variables
+  for (const [key, description] of Object.entries(optionalEnvVars)) {
+    if (!process.env[key]) {
+      warnings.push(`${key} (${description}) - Optional but recommended`);
+    }
+  }
+
   if (missing.length > 0) {
     throw new Error(
-      `Missing required environment variables:\n${missing.join("\n")}\n\n` +
-        "Please check your .env.local file."
+      `❌ Missing required environment variables:\n${missing.join("\n")}\n\n` +
+        "Please check your .env.local file.\n" +
+        "See .env.local.example for reference."
+    );
+  }
+
+  if (warnings.length > 0 && process.env.NODE_ENV !== "production") {
+    console.warn(
+      `⚠️  Optional environment variables not set:\n${warnings.join("\n")}\n`
     );
   }
 }
 
-// Validate on import (build time)
+// Validate on import (build time) - only on server
 if (typeof window === "undefined") {
   validateEnv();
 }
@@ -56,5 +81,9 @@ export const env = {
     cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
     apiKey: process.env.CLOUDINARY_API_KEY,
     apiSecret: process.env.CLOUDINARY_API_SECRET,
+  },
+  paystack: {
+    publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY,
+    secretKey: process.env.PAYSTACK_SECRET_KEY,
   },
 };
