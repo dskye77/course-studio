@@ -5,13 +5,13 @@ import {
   setDoc,
   getDoc,
   getDocs,
+  deleteDoc,
   collection,
   query,
   serverTimestamp,
   runTransaction,
   writeBatch,
 } from "firebase/firestore";
-
 // ID generator
 const makeId = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
@@ -56,6 +56,78 @@ export async function createCourse({
 
   await setDoc(courseRef, courseData);
   return courseData;
+}
+
+// ============================
+// DELETE COURSE
+// ============================
+export async function deleteCourse(courseId) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Login required");
+
+  try {
+    const batch = writeBatch(db);
+
+    // Delete from user's courses
+    const courseRef = doc(db, "users", user.uid, "courses", courseId);
+    batch.delete(courseRef);
+
+    // Check if published and delete from public collections
+    const courseSnap = await getDoc(courseRef);
+    if (courseSnap.exists() && courseSnap.data().published) {
+      const lightRef = doc(db, "publicCourses", courseId);
+      const fullRef = doc(db, "publicCourseData", courseId);
+
+      batch.delete(lightRef);
+      batch.delete(fullRef);
+    }
+
+    await batch.commit();
+    return true;
+  } catch (error) {
+    console.error("Error deleting course:", error);
+    throw error;
+  }
+}
+
+// ============================
+// UPDATE CHAPTER (Modified to remove videoUrl from chapter object)
+// ============================
+export async function updateChapter(courseId, chapterId, data) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Login required");
+
+  const courseRef = doc(db, "users", user.uid, "courses", courseId);
+
+  const snap = await getDoc(courseRef);
+  if (!snap.exists()) throw new Error("Course not found");
+
+  const course = snap.data();
+  const chapters = course.chapters || [];
+
+  const index = chapters.findIndex((c) => c.id === chapterId);
+  if (index === -1) throw new Error("Chapter not found");
+
+  // Remove videoUrl from the chapter object if it exists in data
+  const { videoUrl, ...chapterData } = data;
+
+  chapters[index] = {
+    ...chapters[index],
+    ...chapterData,
+    updatedAt: serverTimestamp(),
+  };
+
+  await setDoc(
+    courseRef,
+    { chapters, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
+
+  if (snap.data()?.published) {
+    await publishCourse(courseId);
+  }
+
+  return chapters[index];
 }
 
 // ============================
@@ -266,43 +338,6 @@ export async function updateCourse({
   if (snap.data()?.published) {
     await publishCourse(courseId);
   }
-}
-
-// ============================
-// CHAPTER FUNCTIONS (unchanged)
-// ============================
-export async function updateChapter(courseId, chapterId, data) {
-  const user = auth.currentUser;
-  if (!user) throw new Error("Login required");
-
-  const courseRef = doc(db, "users", user.uid, "courses", courseId);
-
-  const snap = await getDoc(courseRef);
-  if (!snap.exists()) throw new Error("Course not found");
-
-  const course = snap.data();
-  const chapters = course.chapters || [];
-
-  const index = chapters.findIndex((c) => c.id === chapterId);
-  if (index === -1) throw new Error("Chapter not found");
-
-  chapters[index] = {
-    ...chapters[index],
-    ...data,
-    updatedAt: serverTimestamp(),
-  };
-
-  await setDoc(
-    courseRef,
-    { chapters, updatedAt: serverTimestamp() },
-    { merge: true }
-  );
-
-  if (snap.data()?.published) {
-    await publishCourse(courseId);
-  }
-
-  return chapters[index];
 }
 
 export async function getChapter(courseId, chapterId) {

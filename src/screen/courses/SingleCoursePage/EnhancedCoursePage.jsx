@@ -1,5 +1,4 @@
 // src/screen/courses/SingleCoursePage/EnhancedCoursePage.jsx
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -29,6 +28,7 @@ import {
   PlayCircle,
   Award,
   TrendingUp,
+  AlertCircle,
 } from "lucide-react";
 
 export default function EnhancedCoursePage({ course, relatedCourses = [] }) {
@@ -39,6 +39,22 @@ export default function EnhancedCoursePage({ course, relatedCourses = [] }) {
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [progress, setProgress] = useState(null);
+  const [paystackLoaded, setPaystackLoaded] = useState(false);
+
+  // Check if Paystack is loaded
+  useEffect(() => {
+    const checkPaystack = setInterval(() => {
+      if (typeof window !== "undefined" && window.PaystackPop) {
+        setPaystackLoaded(true);
+        clearInterval(checkPaystack);
+      }
+    }, 100);
+
+    // Clear after 5 seconds
+    setTimeout(() => clearInterval(checkPaystack), 5000);
+
+    return () => clearInterval(checkPaystack);
+  }, []);
 
   useEffect(() => {
     async function checkPurchase() {
@@ -99,62 +115,75 @@ export default function EnhancedCoursePage({ course, relatedCourses = [] }) {
       return;
     }
 
-    if (!window.PaystackPop) {
-      toast.error("Payment system is loading. Please try again in a moment.");
+    if (!paystackLoaded || !window.PaystackPop) {
+      toast.error("Payment system is loading. Please try again.");
       return;
     }
 
-    const config = initializePaystackPayment(course, user.email);
+    setPurchasing(true);
 
-    const handler = window.PaystackPop.setup({
-      ...config,
-      callback: async (response) => {
-        setPurchasing(true);
-        try {
-          // Verify payment
-          const verifiedPayment = await verifyPaystackPayment(
-            response.reference
-          );
+    try {
+      const config = initializePaystackPayment(course, user.email);
 
-          if (!verifiedPayment) {
-            throw new Error("Payment verification failed");
+      const handler = window.PaystackPop.setup({
+        key: config.key,
+        email: config.email,
+        amount: config.amount,
+        currency: config.currency,
+        ref: config.ref,
+        metadata: config.metadata,
+
+        callback: async (response) => {
+          console.log("Payment successful:", response);
+          try {
+            const verified = await verifyPaystackPayment(response.reference);
+
+            if (!verified) throw new Error("Payment verification failed");
+
+            await completePurchase(
+              course.id,
+              {
+                title: course.title,
+                price: course.price,
+                imageUrl: course.imageUrl,
+                authorId: course.authorId,
+                authorName: course.authorName,
+              },
+              {
+                reference: verified.reference,
+                method: "paystack",
+                amount: verified.amount,
+              }
+            );
+
+            toast.success("Payment successful! 🎉");
+            setIsPurchased(true);
+
+            setTimeout(() => {
+              router.push(
+                `/learn/${course.id}/chapter/${course.chapters[0]?.id}`
+              );
+            }, 1500);
+          } catch (error) {
+            console.error("Verification error:", error);
+            toast.error(error.message || "Could not verify payment");
+          } finally {
+            setPurchasing(false);
           }
+        },
 
-          // Complete purchase
-          await completePurchase(
-            course.id,
-            {
-              title: course.title,
-              price: course.price,
-              imageUrl: course.imageUrl,
-              authorId: course.authorId,
-              authorName: course.authorName,
-            },
-            {
-              reference: verifiedPayment.reference,
-              method: "paystack",
-              amount: verifiedPayment.amount,
-            }
-          );
-
-          toast.success("Payment successful! 🎉");
-          setIsPurchased(true);
-          window.location.reload();
-        } catch (error) {
-          console.error("Purchase error:", error);
-          toast.error(error.message || "Failed to complete purchase");
-        } finally {
-          setPurchasing(false);
-        }
-      },
-      onClose: () => {
-        if (!isPurchased) {
+        onClose: () => {
           toast.info("Payment cancelled");
-        }
-      },
-    });
+          setPurchasing(false);
+        },
+      });
 
-    handler.openIframe();
+      handler.openIframe();
+    } catch (error) {
+      console.error("Payment initialization error:", error);
+      toast.error("Failed to initialize payment");
+      setPurchasing(false);
+    }
   };
 
   const handlePurchase = () => {
@@ -351,6 +380,15 @@ export default function EnhancedCoursePage({ course, relatedCourses = [] }) {
                   )}
                 </div>
 
+                {!paystackLoaded && course.price > 0 && (
+                  <div className="flex items-start gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-yellow-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                      Payment system is loading...
+                    </p>
+                  </div>
+                )}
+
                 {isPurchased ? (
                   <div className="space-y-3">
                     <Button
@@ -377,7 +415,9 @@ export default function EnhancedCoursePage({ course, relatedCourses = [] }) {
                     className="w-full"
                     size="lg"
                     onClick={handlePurchase}
-                    disabled={purchasing}
+                    disabled={
+                      purchasing || (course.price > 0 && !paystackLoaded)
+                    }
                   >
                     {purchasing
                       ? "Processing..."

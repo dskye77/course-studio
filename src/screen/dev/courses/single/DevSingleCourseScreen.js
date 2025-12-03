@@ -24,6 +24,7 @@ import {
   updateCourse,
   publishCourse,
   unpublishCourse,
+  deleteCourse,
 } from "@/lib/firebaseCourses";
 import { useCourseEditor } from "@/stores/courseEditor";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import Image from "next/image";
 import Link from "next/link";
@@ -42,8 +51,9 @@ export default function DevSingleCourseScreen({ params }) {
   const [courseId, setCourseId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  // Zustand store
   const {
     course,
     title,
@@ -104,7 +114,6 @@ export default function DevSingleCourseScreen({ params }) {
     }
   }, [user, authLoading, courseId, router, initializeCourse]);
 
-  // Warn about unsaved changes
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (hasUnsavedChanges) {
@@ -121,8 +130,8 @@ export default function DevSingleCourseScreen({ params }) {
     const newErrors = {};
     if (!title.trim()) newErrors.title = "Title is required";
     if (!description.trim()) newErrors.description = "Description is required";
-    if (!price || Number(price) <= 0)
-      newErrors.price = "Price must be greater than 0";
+    if (!price || Number(price) < 0)
+      newErrors.price = "Price must be 0 or greater";
     if (!imageUrl.trim()) newErrors.imageUrl = "Image URL is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -147,7 +156,6 @@ export default function DevSingleCourseScreen({ params }) {
       toast.success("Course updated successfully!");
       markAsSaved();
 
-      // Refresh course data
       const updatedData = await getMyCourseData(courseId);
       initializeCourse(updatedData);
     } catch (err) {
@@ -197,6 +205,19 @@ export default function DevSingleCourseScreen({ params }) {
       toast.error(err.message || "Failed to unpublish course");
     } finally {
       setIsPublishing(false);
+    }
+  };
+
+  const handleDeleteCourse = async () => {
+    setDeleting(true);
+    try {
+      await deleteCourse(courseId);
+      toast.success("Course deleted successfully");
+      router.push("/dev/courses");
+    } catch (err) {
+      console.error("Delete error:", err);
+      toast.error(err.message || "Failed to delete course");
+      setDeleting(false);
     }
   };
 
@@ -263,6 +284,15 @@ export default function DevSingleCourseScreen({ params }) {
           </div>
 
           <div className="flex gap-2">
+            <Button
+              variant="destructive"
+              onClick={() => setShowDeleteDialog(true)}
+              className="gap-2"
+            >
+              <Trash2 size={18} />
+              Delete Course
+            </Button>
+
             <Button
               variant="outline"
               onClick={course.published ? handleUnpublish : handlePublish}
@@ -356,13 +386,16 @@ export default function DevSingleCourseScreen({ params }) {
                 type="number"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder="15000"
+                placeholder="0 for free"
                 disabled={isSaving}
                 className={errors.price ? "border-red-500" : ""}
               />
               {errors.price && (
                 <p className="text-sm text-red-500">{errors.price}</p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Enter 0 for a free course
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -483,25 +516,20 @@ export default function DevSingleCourseScreen({ params }) {
                           </div>
                         )}
 
-                        <Input
-                          placeholder="Video URL (optional)"
-                          value={chapter.videoUrl || ""}
-                          onChange={(e) =>
-                            updateChapter(index, "videoUrl", e.target.value)
-                          }
-                          disabled={isSaving}
-                        />
+                        {chapter.quiz && (
+                          <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+                            <FileText className="w-4 h-4" />
+                            <span>
+                              Quiz: {chapter.quiz.questions.length} questions
+                            </span>
+                          </div>
+                        )}
 
                         <div className="flex gap-4 text-xs text-muted-foreground">
                           <span>Order: {index + 1}</span>
                           {chapter.content && (
                             <span>
                               Content: {chapter.content.length} characters
-                            </span>
-                          )}
-                          {chapter.videoUrl && (
-                            <span className="text-blue-600 dark:text-blue-400">
-                              Has video
                             </span>
                           )}
                         </div>
@@ -514,6 +542,37 @@ export default function DevSingleCourseScreen({ params }) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Course</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &quot;{course.title}&quot;? This
+              action cannot be undone. All chapters, quizzes, and student
+              enrollments will be permanently removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteCourse}
+              disabled={deleting}
+              className="gap-2"
+            >
+              {deleting ? "Deleting..." : "Delete Course"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

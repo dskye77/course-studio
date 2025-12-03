@@ -9,10 +9,12 @@ import {
   getCourseProgress,
   updateProgress,
 } from "@/lib/firebasePurchases";
+import { saveQuizAttempt, getQuizAttempts } from "@/lib/firebaseQuizzes";
 import { getPublishedCourseData } from "@/lib/firebaseCourses";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import QuizPlayer from "@/components/custom/QuizPlayer";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -21,6 +23,8 @@ import {
   BookOpen,
   Menu,
   X,
+  BookOpenCheck,
+  Award,
 } from "lucide-react";
 
 export default function LearnPage({ params }) {
@@ -35,8 +39,9 @@ export default function LearnPage({ params }) {
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [markingComplete, setMarkingComplete] = useState(false);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [quizScore, setQuizScore] = useState(null);
 
-  // Unwrap params
   useEffect(() => {
     const unwrap = async () => {
       const p = await params;
@@ -46,13 +51,11 @@ export default function LearnPage({ params }) {
     unwrap();
   }, [params]);
 
-  // Load course data
   useEffect(() => {
     async function loadCourse() {
       if (!user || !courseId || !chapterId) return;
 
       try {
-        // Check if user owns the course
         const purchased = await hasPurchased(courseId);
         if (!purchased) {
           toast.error("You don't have access to this course");
@@ -60,7 +63,6 @@ export default function LearnPage({ params }) {
           return;
         }
 
-        // Load course data
         const courseData = await getPublishedCourseData(courseId);
         if (!courseData) {
           toast.error("Course not found");
@@ -70,7 +72,6 @@ export default function LearnPage({ params }) {
 
         setCourse(courseData);
 
-        // Find current chapter
         const chapter = courseData.chapters?.find((ch) => ch.id === chapterId);
         if (!chapter) {
           toast.error("Chapter not found");
@@ -79,9 +80,14 @@ export default function LearnPage({ params }) {
 
         setCurrentChapter(chapter);
 
-        // Load progress
         const progressData = await getCourseProgress(courseId);
         setProgress(progressData);
+
+        // Load quiz score if exists
+        if (chapter.quiz) {
+          const previousScore = await getQuizAttempts(courseId, chapterId);
+          setQuizScore(previousScore);
+        }
       } catch (error) {
         console.error("Error loading course:", error);
         toast.error("Failed to load course");
@@ -97,6 +103,13 @@ export default function LearnPage({ params }) {
 
   const handleMarkComplete = async () => {
     if (!currentChapter) return;
+
+    // If there's a quiz and it hasn't been passed, show quiz first
+    if (currentChapter.quiz && !quizScore) {
+      toast.info("Complete the quiz to finish this chapter");
+      setShowQuiz(true);
+      return;
+    }
 
     setMarkingComplete(true);
     try {
@@ -114,7 +127,6 @@ export default function LearnPage({ params }) {
         isCompleted ? "Marked as incomplete" : "Chapter completed! 🎉"
       );
 
-      // Auto-advance to next chapter if marking complete
       if (!isCompleted) {
         setTimeout(() => handleNextChapter(), 1000);
       }
@@ -123,6 +135,43 @@ export default function LearnPage({ params }) {
       toast.error("Failed to update progress");
     } finally {
       setMarkingComplete(false);
+    }
+  };
+
+  const handleQuizComplete = async (attempt) => {
+    try {
+      await saveQuizAttempt(courseId, chapterId, attempt);
+      setQuizScore({
+        score: attempt.score,
+        totalQuestions: attempt.totalQuestions,
+        percentage: attempt.percentage,
+      });
+
+      const passed = attempt.percentage >= currentChapter.quiz.passingScore;
+
+      if (passed) {
+        toast.success(`Quiz passed with ${attempt.percentage}%! 🎉`);
+
+        // Auto-mark chapter as complete if quiz is passed
+        const newProgress = await updateProgress(
+          courseId,
+          currentChapter.id,
+          true
+        );
+        setProgress(newProgress);
+
+        setTimeout(() => {
+          setShowQuiz(false);
+          handleNextChapter();
+        }, 2000);
+      } else {
+        toast.error(
+          `You need ${currentChapter.quiz.passingScore}% to pass. Try again!`
+        );
+      }
+    } catch (error) {
+      console.error("Error saving quiz attempt:", error);
+      toast.error("Failed to save quiz results");
     }
   };
 
@@ -137,6 +186,7 @@ export default function LearnPage({ params }) {
       router.push(`/learn/${courseId}/chapter/${nextChapter.id}`);
     } else {
       toast.success("You've completed the course! 🎉");
+      router.push(`/courses/${courseId}`);
     }
   };
 
@@ -174,10 +224,10 @@ export default function LearnPage({ params }) {
   const isLastChapter = currentIndex === course.chapters.length - 1;
   const isFirstChapter = currentIndex === 0;
   const isCompleted = progress?.completedChapters?.includes(currentChapter.id);
+  const hasQuiz = !!currentChapter.quiz;
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-950">
-      {/* Top Bar */}
       <div className="bg-white dark:bg-gray-900 border-b px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
@@ -216,7 +266,6 @@ export default function LearnPage({ params }) {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
         {sidebarOpen && (
           <div className="w-80 bg-white dark:bg-gray-900 border-r overflow-y-auto">
             <div className="p-4 border-b">
@@ -262,9 +311,14 @@ export default function LearnPage({ params }) {
                         </span>
                       </div>
 
-                      {completed && (
-                        <Check className="w-4 h-4 text-green-600 shrink-0" />
-                      )}
+                      <div className="flex items-center gap-1">
+                        {chapter.quiz && (
+                          <BookOpenCheck className="w-3 h-3 text-blue-600" />
+                        )}
+                        {completed && (
+                          <Check className="w-4 h-4 text-green-600 shrink-0" />
+                        )}
+                      </div>
                     </div>
                   </button>
                 );
@@ -273,68 +327,133 @@ export default function LearnPage({ params }) {
           </div>
         )}
 
-        {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6 space-y-6">
-            {/* Video */}
-            {currentChapter.videoUrl && (
-              <div className="aspect-video rounded-xl overflow-hidden bg-black shadow-lg">
-                <iframe
-                  src={currentChapter.videoUrl}
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
+            {showQuiz && currentChapter.quiz ? (
+              <div>
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowQuiz(false)}
+                  className="mb-4 gap-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Back to Chapter
+                </Button>
+                <QuizPlayer
+                  quiz={currentChapter.quiz}
+                  onComplete={handleQuizComplete}
+                  previousScore={quizScore}
                 />
               </div>
+            ) : (
+              <>
+                <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-sm">
+                  <h1 className="text-3xl font-bold mb-6">
+                    {currentChapter.title}
+                  </h1>
+
+                  <div
+                    className="prose prose-lg dark:prose-invert max-w-none"
+                    dangerouslySetInnerHTML={{ __html: currentChapter.content }}
+                  />
+                </div>
+
+                {hasQuiz && (
+                  <div className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3 flex-1">
+                        <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                          <BookOpenCheck className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-lg mb-1">
+                            Chapter Quiz
+                          </h3>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            {currentChapter.quiz.title}
+                          </p>
+                          <div className="flex items-center gap-4 text-sm">
+                            <span>
+                              {currentChapter.quiz.questions.length} questions
+                            </span>
+                            <span>
+                              Passing: {currentChapter.quiz.passingScore}%
+                            </span>
+                          </div>
+
+                          {quizScore && (
+                            <div className="mt-3 flex items-center gap-2">
+                              <Award
+                                className={`w-4 h-4 ${
+                                  quizScore.percentage >=
+                                  currentChapter.quiz.passingScore
+                                    ? "text-green-600"
+                                    : "text-orange-600"
+                                }`}
+                              />
+                              <span
+                                className={`text-sm font-semibold ${
+                                  quizScore.percentage >=
+                                  currentChapter.quiz.passingScore
+                                    ? "text-green-600"
+                                    : "text-orange-600"
+                                }`}
+                              >
+                                Best Score: {quizScore.percentage}%
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <Button
+                        onClick={() => setShowQuiz(true)}
+                        className="shrink-0"
+                      >
+                        {quizScore ? "Retake Quiz" : "Start Quiz"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm">
+                  <Button
+                    variant="outline"
+                    onClick={handlePrevChapter}
+                    disabled={isFirstChapter}
+                    className="gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </Button>
+
+                  <Button
+                    onClick={handleMarkComplete}
+                    disabled={markingComplete || (hasQuiz && !quizScore)}
+                    variant={isCompleted ? "outline" : "default"}
+                    className="gap-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    {markingComplete
+                      ? "Updating..."
+                      : isCompleted
+                      ? "Completed"
+                      : hasQuiz && !quizScore
+                      ? "Complete Quiz First"
+                      : "Mark Complete"}
+                  </Button>
+
+                  <Button
+                    onClick={handleNextChapter}
+                    disabled={isLastChapter}
+                    className="gap-2"
+                  >
+                    {isLastChapter ? "Finish Course" : "Next"}
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </>
             )}
-
-            {/* Chapter Content */}
-            <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-sm">
-              <h1 className="text-3xl font-bold mb-6">
-                {currentChapter.title}
-              </h1>
-
-              <div
-                className="prose prose-lg dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: currentChapter.content }}
-              />
-            </div>
-
-            {/* Navigation */}
-            <div className="flex items-center justify-between bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm">
-              <Button
-                variant="outline"
-                onClick={handlePrevChapter}
-                disabled={isFirstChapter}
-                className="gap-2"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Previous
-              </Button>
-
-              <Button
-                onClick={handleMarkComplete}
-                disabled={markingComplete}
-                variant={isCompleted ? "outline" : "default"}
-                className="gap-2"
-              >
-                <Check className="w-4 h-4" />
-                {markingComplete
-                  ? "Updating..."
-                  : isCompleted
-                  ? "Completed"
-                  : "Mark Complete"}
-              </Button>
-
-              <Button
-                onClick={handleNextChapter}
-                disabled={isLastChapter}
-                className="gap-2"
-              >
-                {isLastChapter ? "Finish Course" : "Next"}
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
           </div>
         </div>
       </div>

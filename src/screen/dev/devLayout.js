@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useDashboard } from "@/stores/dashboard";
 import { useAuth } from "@/hooks/useAuth"; // ← your new hook
 
-import Sidebar from "@/components/dev/layouts/Sidebar";
+import Sidebar from "@/components/layouts/Sidebar";
 
 export default function DevLayout({ children }) {
   const { user, loading } = useAuth(); // ← beautiful & reusable

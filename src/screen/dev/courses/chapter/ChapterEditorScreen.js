@@ -5,12 +5,27 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { getMyCourseData, updateCourse } from "@/lib/firebaseCourses";
+import {
+  saveChapterQuiz,
+  getChapterQuiz,
+  deleteChapterQuiz,
+} from "@/lib/firebaseQuizzes";
 import { useCourseEditor } from "@/stores/courseEditor";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import RichTextEditor from "@/components/custom/RichTextEditor";
-import { ArrowLeft, Save, Eye, Edit, AlertCircle } from "lucide-react";
+import QuizEditor from "@/components/custom/QuizEditor";
+import {
+  ArrowLeft,
+  Save,
+  Eye,
+  Edit,
+  AlertCircle,
+  BookOpenCheck,
+  Plus,
+  Trash2,
+} from "lucide-react";
 
 export default function ChapterEditorScreen({ params }) {
   const { user, loading: authLoading } = useAuth();
@@ -20,10 +35,11 @@ export default function ChapterEditorScreen({ params }) {
   const [chapterId, setChapterId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isPreview, setIsPreview] = useState(false);
+  const [showQuizEditor, setShowQuizEditor] = useState(false);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
+  const [quiz, setQuiz] = useState(null);
   const [hasLocalChanges, setHasLocalChanges] = useState(false);
 
   const {
@@ -35,25 +51,19 @@ export default function ChapterEditorScreen({ params }) {
     getCourseData,
   } = useCourseEditor();
 
-  // 1) Unwrap params synchronously (no await)
   useEffect(() => {
     if (!params) return;
-    // Next.js route params might be e.g. { id, chapterId }
     setCourseId(params.id ?? params.courseId ?? null);
     setChapterId(params.chapterId ?? params.chapterId ?? null);
   }, [params]);
 
-  // fetchData callback (memoized to avoid recreation in useEffect)
   const fetchData = useCallback(async () => {
-    // defensive: ensure we only run when we have user & route ids
     if (!user || !courseId || !chapterId) return;
 
     setLoading(true);
     try {
-      // try reading chapter from store first
       let chapter = getChapterById(chapterId);
 
-      // if not found or store course mismatch, fetch full course from backend
       if (!chapter || !course || course.id !== courseId) {
         const courseData = await getMyCourseData(courseId);
         if (!courseData) {
@@ -61,7 +71,6 @@ export default function ChapterEditorScreen({ params }) {
           router.replace("/dev/courses");
           return;
         }
-        // initialize the store synchronously with fetched course
         initializeCourse(courseData);
         chapter = courseData.chapters?.find((ch) => ch.id === chapterId);
       }
@@ -72,12 +81,15 @@ export default function ChapterEditorScreen({ params }) {
         return;
       }
 
-      // Initialize local controlled state
       setTitle(chapter.title || "");
       setContent(
         chapter.content || "<p>Start writing your chapter content...</p>"
       );
-      setVideoUrl(chapter.videoUrl || "");
+
+      // Load quiz
+      const chapterQuiz = await getChapterQuiz(courseId, chapterId);
+      setQuiz(chapterQuiz);
+
       setHasLocalChanges(false);
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -95,28 +107,19 @@ export default function ChapterEditorScreen({ params }) {
     course,
   ]);
 
-  // 2) Effect that triggers the fetch after auth and params are available
   useEffect(() => {
-    // if auth is still loading, wait
     if (authLoading) return;
-
-    // if auth finished and there is no user, bail and stop loading state so UI doesn't hang
     if (!user) {
       setLoading(false);
       return;
     }
-
-    // if params are not ready, stop showing spinner (this prevents stuck skeleton)
     if (!courseId || !chapterId) {
       setLoading(false);
       return;
     }
-
-    // All good: load data
     fetchData();
   }, [authLoading, user, courseId, chapterId, fetchData]);
 
-  // Warn about unsaved changes
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (hasLocalChanges) {
@@ -138,7 +141,7 @@ export default function ChapterEditorScreen({ params }) {
       updateChapterById(chapterId, {
         title: title.trim(),
         content,
-        videoUrl: videoUrl.trim(),
+        // videoUrl removed - no longer stored at chapter level
       });
 
       const courseData = getCourseData();
@@ -150,12 +153,39 @@ export default function ChapterEditorScreen({ params }) {
       toast.success("Chapter saved successfully!");
       setHasLocalChanges(false);
 
-      // refresh store with latest from backend
       const updatedCourse = await getMyCourseData(courseId);
       initializeCourse(updatedCourse);
     } catch (err) {
       console.error("Save error:", err);
       toast.error(err.message || "Failed to save chapter");
+    }
+  };
+
+  const handleSaveQuiz = async (quizData) => {
+    try {
+      await saveChapterQuiz(courseId, chapterId, quizData);
+      setQuiz(quizData);
+      setShowQuizEditor(false);
+      toast.success("Quiz saved successfully!");
+    } catch (error) {
+      console.error("Error saving quiz:", error);
+      toast.error("Failed to save quiz");
+    }
+  };
+
+  const handleDeleteQuiz = async () => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this quiz? This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteChapterQuiz(courseId, chapterId);
+      setQuiz(null);
+      toast.success("Quiz deleted");
+    } catch (error) {
+      console.error("Error deleting quiz:", error);
+      toast.error("Failed to delete quiz");
     }
   };
 
@@ -169,16 +199,14 @@ export default function ChapterEditorScreen({ params }) {
     router.push(`/dev/courses/${courseId || ""}`);
   };
 
-  // On-change handler from the editor (accepts { title, content, videoUrl })
   const handleChange = (newData) => {
     if (!newData) return;
     setTitle(newData.title ?? title);
     setContent(newData.content ?? content);
-    setVideoUrl(newData.videoUrl ?? videoUrl);
+    // videoUrl removed from handler
     setHasLocalChanges(true);
   };
 
-  // Show skeleton while auth or data fetching is in progress
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-8">
@@ -188,7 +216,6 @@ export default function ChapterEditorScreen({ params }) {
     );
   }
 
-  // If we don't have course after loading finished, show friendly message
   if (!course) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
@@ -208,19 +235,29 @@ export default function ChapterEditorScreen({ params }) {
     );
   }
 
-  // Safely get the current chapter (may be undefined while store updates).
-  // If it's missing we still render the editor using local state.
   const currentChapter = getChapterById(chapterId) || {
     id: chapterId,
     title,
     content,
-    videoUrl,
     order: 0,
   };
 
+  if (showQuizEditor) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4 md:p-8">
+        <div className="max-w-5xl mx-auto">
+          <QuizEditor
+            quiz={quiz}
+            onSave={handleSaveQuiz}
+            onCancel={() => setShowQuizEditor(false)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
-      {/* Header */}
       <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -262,6 +299,37 @@ export default function ChapterEditorScreen({ params }) {
               )}
             </Button>
 
+            {quiz ? (
+              <Button
+                variant="outline"
+                onClick={() => setShowQuizEditor(true)}
+                className="gap-2"
+              >
+                <BookOpenCheck className="w-4 h-4" />
+                Edit Quiz
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setShowQuizEditor(true)}
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Quiz
+              </Button>
+            )}
+
+            {quiz && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleDeleteQuiz}
+                title="Delete Quiz"
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </Button>
+            )}
+
             <Button
               onClick={handleSave}
               disabled={!hasLocalChanges}
@@ -277,25 +345,27 @@ export default function ChapterEditorScreen({ params }) {
       <div className="flex-1 overflow-hidden">
         {isPreview ? (
           <div className="h-full overflow-auto p-8 space-y-6">
-            {videoUrl && (
-              <div className="bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm border border-gray-200 dark:border-gray-800">
-                <h3 className="text-lg font-semibold mb-4">Video</h3>
-                <div className="aspect-video">
-                  <iframe
-                    src={videoUrl}
-                    className="w-full h-full rounded-lg"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              </div>
-            )}
             <div className="bg-white dark:bg-gray-900 rounded-xl p-8 shadow-sm border border-gray-200 dark:border-gray-800">
+              <h1 className="text-3xl font-bold mb-6">{title}</h1>
               <div
                 className="prose prose-lg dark:prose-invert max-w-none"
                 dangerouslySetInnerHTML={{ __html: content }}
               />
             </div>
+
+            {quiz && (
+              <div className="bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <BookOpenCheck className="w-5 h-5 text-primary" />
+                  <h2 className="text-xl font-semibold">Chapter Quiz</h2>
+                </div>
+                <p className="text-muted-foreground mb-2">{quiz.title}</p>
+                <p className="text-sm text-muted-foreground">
+                  {quiz.questions.length} questions • Passing score:{" "}
+                  {quiz.passingScore}%
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="h-full min-h-0 flex flex-col">
@@ -303,7 +373,7 @@ export default function ChapterEditorScreen({ params }) {
               <RichTextEditor
                 initialContent={content}
                 initialTitle={title}
-                initialVideoUrl={videoUrl}
+                initialVideoUrl="" // Empty - no longer used
                 onChange={handleChange}
                 disabled={false}
               />
