@@ -1,6 +1,8 @@
 // src/components/ErrorBoundary.jsx
 "use client";
 
+import { PLATFORM_CONFIG } from '@/config/platform.config';
+
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -119,10 +121,10 @@ function ErrorFallback({ error, errorInfo }) {
           <div className="text-xs text-muted-foreground text-center">
             If this problem persists, please contact support at{" "}
             <a
-              href="mailto:galaxanionstudios@gmail.com"
+              href={`mailto:${PLATFORM_CONFIG.contact.email}`}
               className="text-primary hover:underline"
             >
-              galaxanionstudios@gmail.com
+              {PLATFORM_CONFIG.contact.email}
             </a>
           </div>
         </CardContent>

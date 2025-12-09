@@ -1,5 +1,5 @@
 "use client";
-
+import { PLATFORM_CONFIG } from "@/config/platform.config";
 import Link from "next/link";
 
 import useBreakpoint from "@/hooks/useBreakpoints";
@@ -36,7 +36,7 @@ export default function Hero() {
       <div className="flex flex-col justify-center items-center gap-6 text-center w-full py-10 md:py-20">
         {/* Hero Heading */}
         <h1 className="text-3xl md:text-5xl font-bold leading-tight max-w-4xl px-4 text-primary text-gradient">
-          Build Courses & Learn Anything, All in One Platform
+          {PLATFORM_CONFIG.tagline  }
         </h1>
 
         {/* Subtext */}

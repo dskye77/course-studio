@@ -1,5 +1,7 @@
 "use client";
 
+import { PLATFORM_CONFIG } from "@/config/platform.config";
+
 import Link from "next/link";
 import { Instagram, Facebook, Twitter, Youtube } from "lucide-react";
 
@@ -12,17 +14,27 @@ import { Instagram, Facebook, Twitter, Youtube } from "lucide-react";
 function BrandingSection() {
   return (
     <div>
-      <h2 className="text-2xl font-bold text-primary">CourseStudio</h2>
+      <h2 className="text-2xl font-bold text-primary">
+        {PLATFORM_CONFIG.name}
+      </h2>
 
       <p className="mt-3 text-muted-foreground">
         The best place to learn, grow, and build your skills for the future.
       </p>
 
       <div className="flex gap-3 mt-4">
-        <SocialIcon href="#" icon={<Instagram className="size-5" />} />
-        <SocialIcon href="#" icon={<Facebook className="size-5" />} />
-        <SocialIcon href="#" icon={<Twitter className="size-5" />} />
-        <SocialIcon href="#" icon={<Youtube className="size-5" />} />
+        {PLATFORM_CONFIG.social.instagram && (
+          <SocialIcon href={PLATFORM_CONFIG.social.instagram} icon={<Instagram className="size-5" />} />
+        )}
+        {PLATFORM_CONFIG.social.facebook && (
+          <SocialIcon href={PLATFORM_CONFIG.social.facebook} icon={<Facebook className="size-5" />} />
+        )}
+        {PLATFORM_CONFIG.social.twitter && (
+          <SocialIcon href={PLATFORM_CONFIG.social.twitter} icon={<Twitter className="size-5" />} />
+        )}
+        {PLATFORM_CONFIG.social.youtube && (
+          <SocialIcon href={PLATFORM_CONFIG.social.youtube} icon={<Youtube className="size-5" />} />
+        )}
       </div>
     </div>
   );

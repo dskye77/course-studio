@@ -6,7 +6,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-
+import { isAdmin } from "@/lib/firebaseAdmin";
+import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -179,6 +180,8 @@ const AuthButtons = ({
 /* ----------------------- Main Header ----------------------- */
 
 export default function Header() {
+  const [isAdminUser, setIsAdminUser] = useState(false);
+
   const pathname = usePathname();
   const { user, loading } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -190,6 +193,16 @@ export default function Header() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    async function checkAdmin() {
+      if (user) {
+        const adminStatus = await isAdmin();
+        setIsAdminUser(adminStatus);
+      }
+    }
+    checkAdmin();
+  }, [user]);
 
   if (
     pathname.startsWith("/login") ||
@@ -207,7 +220,6 @@ export default function Header() {
       toast.error("Logout failed");
     }
   };
-
   return (
     <header className="w-full px-6 py-4 border-b border-gray-200 dark:border-gray-800 backdrop-blur-md sticky top-0 z-50 bg-white/80 dark:bg-gray-950/80">
       <div className="flex items-center justify-between">
@@ -223,6 +235,7 @@ export default function Header() {
             user={user}
             handleLogout={handleLogout}
             setMobileOpen={setMobileOpen}
+            isAdminUser={isAdminUser}
           />
         </div>
 
